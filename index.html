@@ -264,7 +264,6 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .tag.day{background:color-mix(in srgb,var(--tc) 14%,var(--card));color:var(--ink)}
 .box{background:var(--sunk);border-radius:10px;padding:6px 10px;min-width:0}
 .box.wide{grid-column:1/-1}
-.box.who{grid-column:span 2}
 .box small{display:block;font-size:12px;font-weight:600;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .box b{display:block;font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .doc.plain .boxes{margin-bottom:0}
@@ -346,7 +345,7 @@ const FIELDS = {
   id:        [['number', 'Número', 'big'], ['expires', 'Validade', 'date', 1]],
   ticket:    [['route', 'Trecho', 'wide'], ['number', 'Localizador', 'big'], ['flight', 'Voo', '', 1], ['seat', 'Poltrona', '', 1], ['gate', 'Portão', '', 1], ['terminal', 'Terminal', '', 1], ['group', 'Grupo', '', 1], ['boarding', 'Embarque', 'datetime', 1], ['departure', 'Decolagem', 'datetime', 1], ['arrival', 'Chegada', 'datetime', 1], ['class', 'Classe'], ['baggage', 'Bagagem despachada'], ['eticket', 'Nº do bilhete', 'wide']],
   stay:      [['number', 'Localizador', 'big'], ['hotel', 'Hotel', 'wide'], ['address', 'Endereço', 'wide'], ['checkin', 'Check-in', 'date', 1], ['checkout', 'Check-out', 'date', 1], ['checkinTime', 'Entrada', 'time', 1], ['checkoutTime', 'Saída', 'time', 1], ['nights', 'Noites', '', 1], ['total', 'Valor total'], ['phone', 'Telefone', 'tel']],
-  tour:      [['name', 'Passeio', 'wide'], ['number', 'Localizador', 'big'], ['what', 'O que é', '', 1], ['date', 'Data', 'date', 1], ['time', 'Horário', 'time', 1], ['meeting', 'Ponto de encontro', 'wide']],
+  tour:      [['number', 'Localizador', 'big'], ['what', 'O que é', '', 1], ['date', 'Data', 'date', 1], ['time', 'Horário', 'time', 1], ['meeting', 'Ponto de encontro', 'wide']],
   insurance: [['number', 'Número da apólice', 'big'], ['value', 'Valor da apólice', '', 1], ['expires', 'Válido até', 'date', 1], ['phone', 'Telefone de emergência', 'tel']],
   health:    [['what', 'O que é', 'wide'], ['number', 'Número', 'big'], ['date', 'Data', 'date', 1]],
   money:     [['value', 'Valor', 'big'], ['place', 'Local', 'wide', 1], ['date', 'Data', 'date', 1]],
@@ -470,9 +469,7 @@ function boxes(d){
   // embarque/decolagem/chegada no mesmo dia: mostra só a hora
   const days = new Set(list.filter(f => f[2] === 'datetime').map(f => fval(d, f[0]).slice(0, 10)));
   window.__day = days.size === 1 ? [...days][0] : '';
-  // Nome da pessoa: o primeiro quadradinho de todos os tipos
-  const who = d.holder ? `<span class="box who"><small>Nome</small><b>${esc(d.holder)}</b></span>` : '';
-  const html = who + list.map(([k, l, kind]) => `<span class="box${kind === 'wide' ? ' wide' : ''}"><small>${l}</small><b>${esc(fshort(kind, fval(d, k)))}</b></span>`).join('');
+  const html = list.map(([k, l, kind]) => `<span class="box${kind === 'wide' ? ' wide' : ''}"><small>${l}</small><b>${esc(fshort(kind, fval(d, k)))}</b></span>`).join('');
   window.__day = '';
   return html ? `<span class="boxes">${html}</span>` : '';
 }
@@ -671,10 +668,10 @@ function openDocForm(doc, pre){
       <fieldset class="field" style="border:0;padding:0;margin-inline:0"><legend style="font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Tipo</legend>
         <div class="types">${ORDER.map(k => `<label style="--tc:${TYPES[k].col}"><input type="radio" name="type" value="${k}" ${d.type === k ? 'checked' : ''}><span>${typeIcon(k)}${TYPES[k].l}</span></label>`).join('')}</div>
       </fieldset>
-      <label class="field"><span>Nome do documento</span><input class="inp${auto.has('title') ? ' auto' : ''}" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
+      <label class="field"><span>Nome</span><input class="inp${auto.has('title') ? ' auto' : ''}" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
       <div id="fieldbox">${fieldsHTML(d.type, d, auto)}</div>
       ${pre?.mrz && pre.numberOk === false ? '<small class="hint">Confira o número: a foto pode ter atrapalhado a leitura.</small>' : ''}
-      <label class="field"><span>Nome</span><input class="inp${auto.has('holder') ? ' auto' : ''}" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
+      <label class="field"><span>Titular</span><input class="inp${auto.has('holder') ? ' auto' : ''}" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
       <label class="field"><span>Viagem</span><select class="inp${matched ? ' auto' : ''}" name="tripId"><option value="">Pessoal (todas as viagens)</option>${tripsSorted().map(t => `<option value="${t.id}" ${d.tripId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
       <label class="field"><span>Observações</span><textarea class="inp${auto.has('notes') ? ' auto' : ''}" name="notes" placeholder="Ex.: original fica na pasta azul">${esc(d.notes)}</textarea></label>
       <div class="field"><span>Arquivos</span>
@@ -835,7 +832,7 @@ function drawViewer(){
         <div class="facts">
           ${fieldsOf(d.type).filter(f => f !== bf && fval(d, f[0])).map(([k, l, kind]) => `<div class="fact${kind === 'wide' || kind === 'tel' ? ' wide' : ''}${k === 'expires' && st ? ' ' + st.k : ''}"><small>${l}</small><b>${kind === 'tel' ? `<a href="tel:${esc(fval(d, k).replace(/[^\d+]/g, ''))}">${esc(fval(d, k))}</a>` : esc(fshow(kind, fval(d, k)))}</b></div>`).join('')}
           ${st && st.k !== 'ok' ? `<div class="fact ${st.k}"><small>Situação</small><b>${st.t}</b></div>` : ''}
-          ${d.holder ? `<div class="fact wide"><small>Nome</small><b>${esc(d.holder)}</b></div>` : ''}
+          ${d.holder ? `<div class="fact"><small>Titular</small><b>${esc(d.holder)}</b></div>` : ''}
           ${trip ? `<div class="fact"><small>Viagem</small><b>${esc(trip.name)}</b></div>` : ''}
           ${d.notes ? `<div class="fact wide"><small>Observações</small><b class="notes">${esc(d.notes)}</b></div>` : ''}
         </div>
