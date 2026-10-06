@@ -222,6 +222,30 @@ function findDates(text){
   return out.filter((d, k) => out.findIndex(e => e.i === d.i) === k).sort((a, b) => a.i - b.i);
 }
 const fmtBR = d => d.split('-').reverse().join('/');
+
+// Bilhetes com vários voos: "São Paulo (GRU) to Dubai (DXB)" ... dados de cada trecho
+function parseLegs(T){
+  const re = /([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,30}?)\s*\(([A-Z]{3})\)\s*(?:to|para|-|–|→|>|a)\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,30}?)\s*\(([A-Z]{3})\)/g;
+  const hits = [...T.matchAll(re)].filter(m => AIRPORTS.has(m[2]) || AIRPORTS.has(m[4]));
+  return hits.map((m, i) => {
+    const seg = T.slice(m.index, hits[i + 1]?.index ?? m.index + 1500);
+    const ds = findDates(seg);
+    const at = re2 => {
+      const d = ds.find(x => re2.test(x.ctx.slice(-30))); if (!d) return '';
+      const t = (seg.slice(d.i, d.i + 30).match(/^\S+(?:\s\S+){0,2}?\s+(\d{1,2}[:h]\d{2})\b/) || [])[1] || (seg.slice(Math.max(0, d.i - 14), d.i).match(/(\d{1,2}[:h]\d{2})\s*$/) || [])[1];
+      return t ? `${d.date}T${t.replace(/h/i, ':').padStart(5, '0')}` : d.date;
+    };
+    const clean = c => titleCase(c.replace(/^(?:leg\s+\d+\s+of\s+\d+\s*\|?\s*|de\s+|from\s+|\|\s*)/i, '').trim());
+    return {
+      from: clean(m[1]), fromCode: m[2], to: clean(m[3]), toCode: m[4],
+      flight: ((seg.match(/\b(?:flight|voo|vuelo)\b[^\n]{0,10}\n?\s*([A-Z0-9]{2}\s?\d{2,4})\b/i) || [])[1] || '').toUpperCase(),
+      dep: at(/(departure|partida|sa[íi]da|decolagem)[\s\S]*$/i),
+      arr: at(/(arrival|chegada|llegada)[\s\S]*$/i),
+      terminal: (seg.match(/terminal\s*[:\-]?\s*([A-Z0-9]{1,3})\b/i) || [])[1] || '',
+      seat: (seg.match(/(?:seat|assento|poltrona)\s*[:\-]?\s*(\d{1,2}[A-K])\b/i) || [])[1] || '',
+    };
+  });
+}
 const near = (dates, re) => dates.find(d => re.test(d.ctx.slice(-35)))?.date;
 const latest = dates => dates.map(d => d.date).sort().pop();
 const future = dates => dates.filter(d => d.date >= new Date(Date.now() - 864e5 * 400).toISOString().slice(0, 10));
@@ -240,8 +264,8 @@ const CLUES = {
   passport:  [[/passaporte|passport|pasaporte/i, 3]],
   visa:      [[/\bvisto\b|\bvisa\b(?!\s*(card|cart[ãa]o|electron|infinite|platinum|gold|signature))|schengen|consulado|consulate/i, 3]],
   id:        [[/carteira\s+de\s+identidade|registro\s+geral|habilita[çc][ãa]o|\bCNH\b|\bRG\b|identity\s+card/i, 4]],
-  ticket:    [[/cart[ãa]o\s+de\s+embarque|boarding\s+pass|e-?ticket|bilhete\s+eletr[ôo]nico/i, 5], [/\bvoo\b|flight|aeroporto|airport|airlines?|companhia\s+a[ée]rea/i, 2], [/port[ãa]o|\bgate\b|assento|poltrona|\bseat\b|bagagem|baggage/i, 1], [/\([A-Z]{3}\)/, 1]],
-  stay:      [[/check-?in|check-?out/i, 3], [/hotel|pousada|hostel|hospedagem|accommodation|acomoda[çc][ãa]o|booking\.com|airbnb|h[óo]spede|\bguest\b|noites|nights|quarto|room/i, 2]],
+  ticket:    [[/cart[ãa]o\s+de\s+embarque|boarding\s+pass|e-?ticket|bilhete\s+eletr[ôo]nico|ticket\s+(?:number|&\s*receipt)|booking\s+reference|passenger\s+name|conditions\s+of\s+carriage|operated\s+by|itinerary|itiner[áa]rio\s+de\s+voo|localizador/i, 6], [/\bvoo\b|flight|aeroporto|airport|airlines?|companhia\s+a[ée]rea/i, 2], [/port[ãa]o|\bgate\b|assento|poltrona|\bseat\b|bagagem|baggage/i, 1], [/\([A-Z]{3}\)/, 1]],
+  stay:      [[/check-?out/i, 3], [/check-?in(?!\s+(?:at\s+the\s+airport|online|points|desk|counter|no\s+aeroporto))/i, 1], [/hotel|pousada|hostel|hospedagem|accommodation|acomoda[çc][ãa]o|booking\.com|airbnb|h[óo]spede|\bguest\b|noites|nights|quarto|room/i, 2]],
   tour:      [[/getyourguide|get your guide|viator|civitatis|klook|tiqets|musement|headout|guruwalk|sandemans/i, 6], [/\btour\b|passeio|excurs[ãa]o|excursion|ingresso|admission|ponto\s+de\s+encontro|meeting\s+point|atividade|activity|experi[êe]ncia/i, 2]],
   insurance: [[/seguro\s+viagem|travel\s+insurance|ap[óo]lice|policy\s+number|assist[êe]ncia\s+(?:em\s+)?viagem|assist\s+card|affinity|travel\s+ace/i, 5], [/seguro|insurance|cobertura|coverage|segurado|insured/i, 2]],
   health:    [[/vacina|vacina[çc][ãa]o|vaccin|imuniza[çc][ãa]o|febre\s+amarela|yellow\s+fever|certificado\s+internacional/i, 5], [/exame|laudo|m[ée]dic[oa]|receita|sa[úu]de|health/i, 1]],
@@ -267,6 +291,11 @@ const NOT_AIRPORT = new Set(['CPF', 'BRL', 'USD', 'EUR', 'PDF', 'LTD', 'CNH', 'G
 const PLACES = { BRA:['brasileiro','Brasil'], PRT:['português','Portugal'], ITA:['italiano','Itália'], ESP:['espanhol','Espanha'], D:['alemão','Alemanha'], DEU:['alemão','Alemanha'], FRA:['francês','França'], USA:['americano','Estados Unidos'], ARG:['argentino','Argentina'], GBR:['britânico','Reino Unido'], URY:['uruguaio','Uruguai'], PRY:['paraguaio','Paraguai'], CHL:['chileno','Chile'], JPN:['japonês','Japão'], CAN:['canadense','Canadá'], MEX:['mexicano','México'], POL:['polonês','Polônia'], NLD:['holandês','Holanda'], CHE:['suíço','Suíça'], IRL:['irlandês','Irlanda'], AUS:['australiano','Austrália'], NZL:['neozelandês','Nova Zelândia'], CHN:['chinês','China'], IND:['indiano','Índia'], COL:['colombiano','Colômbia'], PER:['peruano','Peru'], AUT:['austríaco','Áustria'], BEL:['belga','Bélgica'], GRC:['grego','Grécia'], ISR:['israelense','Israel'], ZAF:['sul-africano','África do Sul'], KOR:['sul-coreano','Coreia do Sul'] };
 
 function holderFrom(text){
+  const sl = text.match(/(?:passenger(?:\s+name)?|passageiro|nome\s+do\s+passageiro)\s*[:\-]?\s*\n?\s*([A-Z][A-Z' -]{1,40})\/\s*\n?\s*([A-Z][A-Z' ]{1,40})/i);
+  if (sl) {
+    const giv = sl[2].trim().replace(/\s*(MISS|MRS|MSTR|MR|MS)$/i, '').replace(/(MISS|MRS|MSTR)$/i, '');
+    return titleCase(`${giv} ${sl[1].trim()}`);
+  }
   const raw = grab(text, /(?:nome\s+do\s+(?:passageiro|segurado|h[óo]spede|titular)|passageiro|passenger(?:\s+name)?|segurado|insured(?:\s+name)?|guest(?:\s+name)?|h[óo]spede|titular|nome(?:\s+civil)?|name)\s*[:\-]?\s*\n?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ'´\/ ]{4,48})/i);
   if (!raw) return '';
   let s = raw.split(/\s{2,}|\n/)[0];
@@ -332,10 +361,31 @@ function fromText(type, text){
       if (arrT && arrT !== '00000' && arrT !== dep) X.arrival = `${timed[1]?.date || day}T${arrT}`;
       X.terminal = grab(T, /terminal\s*[:\-]?\s*([A-Z0-9]{1,3})\b/i).toUpperCase();
       const cls = grab(T, /(?:classe|class|cabin|cabine)\s*[:\-]\s*([A-Za-z][A-Za-z ]{2,24}?)\s*(?:,|\n|\s{2}|$)/i); if (cls) X.class = titleCase(cls);
-      const bag = grab(T, /(?:free\s+checked\s+baggage|checked\s+bag(?:gage)?|baggage\s+allowance|franquia\s+de\s+bagagem|bagagem\s+despachada|bagagem)\s*[:\-]?\s*(\d+\s*(?:PC|pe[çc]as?|pieces?|kg|x\s*\d+\s*kg)?)/i);
+      const bag = grab(T, /(?:free\s+checked\s+baggage|checked\s+bag(?:gage)?|baggage\s+allowance|franquia\s+de\s+bagagem|bagagem\s+despachada|bagagem|baggage)\s*[:\-]?\s*(\d+\s*(?:PC|pe[çc]as?|pieces?|kg|x\s*\d+\s*kg)?)/i);
       if (bag) X.baggage = bag.replace(/(\d+)\s*(PC|pieces?|pe[çc]as?)/i, (_, n) => `${n} ${+n === 1 ? 'peça' : 'peças'}`);
       X.eticket = grab(T, /(?:ticket\s+(?:number|no\.?)|n[úu]mero\s+do\s+bilhete|e-?ticket\s*(?:n[º°o.]*)?)\s*[:\-]?\s*(\d{3}[\s-]?\d{10})\b/i);
       const dur = grab(T, /(?:dura[çc][ãa]o|duration)\s*[:\-]?\s*(\d{1,2}[:h]\d{2})/i); if (dur) { const [h, m] = dur.split(/[:h]/i); r.notes = `Duração do voo: ${+h}h${m}` }
+      const legs = parseLegs(T);
+      if (legs.length > 1) {
+        const now = new Date().toISOString().slice(0, 16);
+        const next = legs.find(l => (l.dep || '') >= now) || legs[0];
+        const first = legs[0], last = legs[legs.length - 1];
+        const round = last.toCode === first.fromCode;
+        const dest = round ? legs[Math.ceil(legs.length / 2) - 1] : last;
+        const stops = [...new Set(legs.slice(0, round ? Math.ceil(legs.length / 2) : legs.length).slice(0, -1).map(l => l.to))];
+        X.route = `${first.from} (${first.fromCode}) para ${dest.to} (${dest.toCode})${round ? ', ida e volta' : ''}${stops.length ? `, via ${stops.join(', ')}` : ''}`;
+        short = `${first.fromCode} para ${dest.toCode}${round ? ' ida e volta' : ''}`;
+        // quadradinhos mostram o próximo voo
+        for (const k of ['flight', 'departure', 'arrival', 'boarding', 'terminal', 'seat', 'gate']) delete X[k];
+        if (next.flight) X.flight = next.flight;
+        if (next.dep) X.departure = next.dep;
+        if (next.arr) X.arrival = next.arr;
+        if (next.terminal) X.terminal = next.terminal;
+        if (next.seat) X.seat = next.seat;
+        const br = v => v ? `${fmtBR(v.slice(0, 10)).slice(0, 5)}${v.length > 10 ? ' ' + v.slice(11, 16) : ''}` : '';
+        r.notes = ['Voos deste bilhete:', ...legs.map((l, i) => `${i + 1}. ${l.fromCode} para ${l.toCode}${l.flight ? ', ' + l.flight : ''}${l.dep ? ', sai ' + br(l.dep) : ''}${l.arr ? ', chega ' + br(l.arr) : ''}`), r.notes].filter(Boolean).join('\n');
+        r.start = first.dep?.slice(0, 10) || r.start; r.end = (last.arr || last.dep || '').slice(0, 10) || r.end;
+      }
       r.title = [air || 'Passagem', short].filter(Boolean).join(' ');
       r.start = day; r.end = latest(fut);
       break;
