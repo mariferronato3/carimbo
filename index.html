@@ -258,6 +258,13 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .present .v-h h2{font-size:22px}
 
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translate(-50%,20px);background:var(--ink);color:var(--paper);padding:12px 18px;border-radius:999px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
+.doc-wrap{position:relative}
+.doc-wrap .doc-main{padding-right:34px}
+.doc-del{position:absolute;top:10px;right:8px;width:44px;height:44px;border-radius:50%;border:0;background:transparent;color:var(--ink-3);display:grid;place-items:center}
+.doc-del svg{width:19px;height:19px}
+.doc-del:hover,.doc-del:focus-visible{background:var(--bad-soft);color:var(--bad)}
+.toast.undo{pointer-events:auto;padding:6px 6px 6px 18px;display:flex;align-items:center;gap:6px}
+.toast button{border:0;background:var(--stamp);color:var(--on-stamp);font-weight:700;border-radius:999px;padding:8px 14px}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 .settings p{color:var(--ink-2);margin:6px 0 0}
 .settings .group{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:12px}
@@ -447,7 +454,7 @@ function summary(d){
 function docCard(d){
   const t = TYPES[d.type] || TYPES.other, st = status(d), bf = bigField(d), bv = bf && fval(d, bf[0]);
   const trip = d.tripId && state.trips.find(x => x.id === d.tripId);
-  return `<button class="doc${d.number ? '' : ' plain'}" style="--tc:${t.col}" data-act="open" data-id="${d.id}">
+  return `<div class="doc-wrap"><button class="doc${d.number ? '' : ' plain'}" style="--tc:${t.col}" data-act="open" data-id="${d.id}">
     <span class="thumb">${typeIcon(d.type)}</span>
     <span class="doc-main">
       <span class="doc-title">${esc(d.title)}</span>
@@ -455,7 +462,7 @@ function docCard(d){
       <span class="tags">${st ? `<span class="tag ${st.k}">${st.t}</span>` : ''}${summary(d).filter(Boolean).map(v => `<span class="tag">${esc(v)}</span>`).join('')}${state.filter === 'all' && trip ? `<span class="tag">${esc(trip.name)}</span>` : ''}${(d.files||[]).length > 1 ? `<span class="tag">${d.files.length} arquivos</span>` : ''}</span>
     </span>
     ${d.number ? `<span class="mrz" aria-hidden="true">${esc(mrz(d))}</span>` : ''}
-  </button>`;
+  </button><button class="doc-del" data-act="del-doc" data-id="${d.id}" aria-label="Excluir ${esc(d.title)}">${ICON.trash}</button></div>`;
 }
 
 function render(){
@@ -532,6 +539,7 @@ const ICON = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   present: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10 18h4"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
 };
 
@@ -869,8 +877,19 @@ async function importAll(file){
 }
 
 /* ---------- Eventos ---------- */
-let toastT;
-function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200) }
+let toastT, lastDeleted = null;
+async function deleteDoc(id){
+  const d = state.docs.find(x => x.id === id); if (!d) return;
+  await dbDel('docs', id); state.docs = state.docs.filter(x => x.id !== id); lastDeleted = d;
+  if ($('#form').open) $('#form').close();
+  if ($('#viewer').open) closeViewer();
+  render();
+  const t = $('#toast'); clearTimeout(toastT);
+  t.innerHTML = 'Documento excluído <button type="button" data-act="undo-del">Desfazer</button>';
+  t.classList.add('on', 'undo');
+  toastT = setTimeout(() => { t.classList.remove('on', 'undo'); lastDeleted = null }, 6000);
+}
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.remove('undo'); t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200) }
 function setFilter(id){ state.filter = id; store.set('carimbo.filter', id); render(); window.scrollTo({ top:0 }) }
 
 document.addEventListener('click', async e => {
@@ -905,9 +924,11 @@ document.addEventListener('click', async e => {
     }
     case 'copy': try { await navigator.clipboard.writeText(b.dataset.v); toast('Número copiado') } catch { toast('Não foi possível copiar') } break;
     case 'rm-file': draftFiles.splice(+b.dataset.i, 1); drawFiles(); break;
-    case 'del-doc':
-      if (!confirm('Excluir este documento e os arquivos dele? Isso não pode ser desfeito.')) return;
-      await dbDel('docs', id); state.docs = state.docs.filter(d => d.id !== id); if ($('#form').open) $('#form').close(); if ($('#viewer').open) closeViewer(); render(); toast('Documento excluído'); break;
+    case 'del-doc': deleteDoc(id); break;
+    case 'undo-del':
+      if (!lastDeleted) return;
+      await dbPut('docs', lastDeleted); state.docs.push(lastDeleted); lastDeleted = null;
+      render(); toast('Documento restaurado'); break;
     case 'del-trip': {
       if (!confirm('Excluir esta viagem? Os documentos dela passam para Pessoais.')) return;
       for (const d of state.docs.filter(d => d.tripId === id)) { d.tripId = ''; await dbPut('docs', d) }
