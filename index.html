@@ -178,6 +178,24 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .pick label{cursor:pointer}
 .pick input{position:absolute;opacity:0;width:1px;height:1px}
 
+.lead{color:var(--ink-2);margin:0 0 14px}
+.kinds{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kind{min-height:64px;border-radius:16px;border:1px solid var(--line);background:var(--card);text-align:left;padding:12px 14px;font-weight:600;font-size:16px;line-height:1.2;display:flex;align-items:center;gap:10px}
+.kind i{width:12px;height:12px;border-radius:50%;background:var(--tc);flex:none}
+.kind:active{background:var(--sunk)}
+.link-plain{display:block;background:none;border:0;color:var(--stamp);font-weight:600;padding:14px 0 4px;margin:4px auto 0}
+.reading{text-align:center;padding:28px 8px 20px}
+.reading svg{width:112px;height:112px;color:var(--stamp)}
+.reading .ring{transform-origin:60px 60px;animation:spin 5s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.reading h3{font-size:21px;margin:14px 0 4px}
+.reading p{margin:0;color:var(--ink-2)}
+.reading .fine{font-size:14px;color:var(--ink-3);margin-top:14px}
+.auto-note{margin:4px 0 0;background:var(--stamp-soft);border-radius:14px;padding:12px 14px;font-size:15px}
+.auto-note.warn{background:var(--warn-soft);color:var(--warn)}
+.inp.auto{border-color:var(--stamp);box-shadow:inset 3px 0 0 var(--stamp)}
+#pickstatus{color:var(--stamp);font-weight:600}
+
 /* Visualizador */
 #viewer{max-width:none;height:100dvh;max-height:100dvh;margin:0;border-radius:0;background:var(--paper)}
 #viewer[open]{animation:fade .2s}
@@ -248,6 +266,7 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 <dialog id="viewer"></dialog>
 <div class="toast" id="toast" role="status"></div>
 
+<script src="extract.js"></script>
 <script>
 /* ---------- Dados ---------- */
 const TYPES = {
@@ -442,40 +461,119 @@ const ICON = {
 };
 
 /* ---------- Formulário de documento ---------- */
-let draftFiles = [];
+let draftFiles = [], draftText = '', pendingKind = 'other', readToken = 0;
 
-function openDocForm(doc){
-  const d = doc || { id:uid(), type:'passport', title:'', holder: store.get('carimbo.holder') || '', number:'', expires:'', tripId: state.trips.some(t => t.id === state.filter) ? state.filter : '', pinned:false, notes:'', files:[] };
+/* Passo 1: escolher o tipo. O resto o Carimbo lê sozinho. */
+function openNewDoc(){
+  const dlg = $('#form');
+  dlg.innerHTML = `<div class="sheet">
+    <div class="sheet-h"><h2>Que documento é?</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
+    <div class="sheet-b">
+      <p class="lead">Escolha o tipo e depois tire uma foto ou escolha o PDF. O Carimbo lê e preenche o resto.</p>
+      <div class="kinds">${ORDER.map(k => `<button type="button" class="kind" style="--tc:${TYPES[k].col}" data-act="kind" data-id="${k}"><i></i>${TYPES[k].l}</button>`).join('')}</div>
+      <input type="file" accept="image/*,application/pdf" multiple class="sr" data-kindfile tabindex="-1" aria-hidden="true">
+      <button type="button" class="link-plain" data-act="kind-blank">Preencher à mão, sem arquivo</button>
+    </div></div>`;
+  if (!dlg.open) dlg.showModal();
+}
+
+/* Passo 2: ler o arquivo */
+async function readNewDoc(fileList){
+  const token = ++readToken, type = pendingKind;
+  const files = [];
+  for (const f of fileList) files.push(await prepFile(f));
+  const sheet = $('#form .sheet-b');
+  sheet.innerHTML = `<div class="reading" role="status">
+    <svg viewBox="0 0 120 120" aria-hidden="true"><g class="ring" fill="none" stroke="currentColor"><circle cx="60" cy="60" r="44" stroke-width="5"/><circle cx="60" cy="60" r="33" stroke-width="2" stroke-dasharray="5 4"/></g></svg>
+    <h3>Lendo ${TYPES[type].l.toLowerCase()}</h3>
+    <p id="readstatus">Abrindo o arquivo…</p>
+    <p class="fine">Tudo acontece neste celular. Nada é enviado.</p>
+    <button type="button" class="link-plain" data-act="skip-read">Pular e preencher à mão</button>
+  </div>`;
+  $('#form h2').textContent = 'Novo documento';
+  skipFiles = files;
+  let res = { filled: [] };
+  try {
+    res = await Extract.read(files, type, msg => { const s = $('#readstatus'); if (s && token === readToken) s.textContent = msg });
+  } catch (e) { res = { filled: [], failed: true } }
+  if (token !== readToken) return;
+  openDocForm(null, { ...res, type, files });
+}
+let skipFiles = [];
+
+function matchTrip(dates){
+  if (!dates?.length) return '';
+  for (const t of state.trips) {
+    if (!t.start) continue;
+    const a = +toDate(t.start) - 3 * 864e5, b = +toDate(t.end || t.start) + 3 * 864e5;
+    if (dates.some(d => { const x = +toDate(d); return x >= a && x <= b })) return t.id;
+  }
+  return '';
+}
+
+function openDocForm(doc, pre){
+  const filterTrip = state.trips.some(t => t.id === state.filter) ? state.filter : '';
+  const d = doc || {
+    id: uid(), type: pre?.type || 'passport', title: pre?.title || '', number: pre?.number || '',
+    holder: pre?.holder || store.get('carimbo.holder') || '', expires: pre?.expires || '', notes: pre?.notes || '',
+    tripId: filterTrip || (['ticket', 'stay', 'insurance', 'visa'].includes(pre?.type) ? matchTrip(pre?.dates) : ''),
+    pinned: pre?.type === 'passport' && !state.docs.some(x => x.pinned && x.type === 'passport'), files: pre?.files || [],
+  };
   draftFiles = (d.files || []).slice();
+  draftText = pre?.text || '';
+  const auto = new Set(pre?.filled || []);
+  const cls = k => auto.has(k) ? ' auto' : '';
+  const matched = pre && !filterTrip && d.tripId;
   const dlg = $('#form');
   dlg.innerHTML = `<form class="sheet" data-form="doc" data-id="${d.id}">
     <div class="sheet-h"><h2>${doc ? 'Editar documento' : 'Novo documento'}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
     <div class="sheet-b">
+      ${pre && !pre.skipped ? (auto.size
+        ? `<p class="auto-note">Preenchi ${auto.size === 1 ? 'o campo destacado' : `os ${auto.size} campos destacados`} lendo o documento${matched ? ' e coloquei na viagem certa' : ''}. Confira e toque em Salvar.</p>`
+        : `<p class="auto-note warn">${pre.failed ? 'Não consegui abrir o leitor agora.' : 'Não encontrei os dados neste arquivo.'}${draftFiles.length ? ' O arquivo está guardado; complete o que precisar.' : ''}</p>`) : ''}
       <div class="field"><span>Arquivos</span>
         <div class="pick">
           <label class="btn ghost sm"><input type="file" accept="image/*" capture="environment" data-pick>Tirar foto</label>
           <label class="btn ghost sm"><input type="file" accept="image/*,application/pdf" multiple data-pick>Escolher foto ou PDF</label>
         </div>
         <div class="files" id="files"></div>
+        <small id="pickstatus" role="status"></small>
       </div>
       <fieldset class="field" style="border:0;padding:0;margin-inline:0"><legend style="font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Tipo</legend>
         <div class="types">${ORDER.map(k => `<label style="--tc:${TYPES[k].col}"><input type="radio" name="type" value="${k}" ${d.type === k ? 'checked' : ''}><span>${TYPES[k].l}</span></label>`).join('')}</div>
       </fieldset>
-      <label class="field"><span>Nome do documento</span><input class="inp" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
-      <label class="field"><span>Número</span><input class="inp mono" name="number" value="${esc(d.number)}" placeholder="FX123456" autocomplete="off" autocapitalize="characters" spellcheck="false"><small>Aparece grande para você ditar ou copiar no balcão.</small></label>
+      <label class="field"><span>Nome do documento</span><input class="inp${cls('title')}" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
+      <label class="field"><span>Número</span><input class="inp mono${cls('number')}" name="number" value="${esc(d.number)}" placeholder="FX123456" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <small>${pre?.mrz && pre.numberOk === false ? 'Confira este número: a foto pode ter atrapalhado a leitura.' : 'Aparece grande para você ditar ou copiar no balcão.'}</small></label>
       <div class="two">
-        <label class="field"><span>Titular</span><input class="inp" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
-        <label class="field"><span>Validade</span><input class="inp" type="date" name="expires" value="${esc(d.expires)}"></label>
+        <label class="field"><span>Titular</span><input class="inp${cls('holder')}" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
+        <label class="field"><span>Validade</span><input class="inp${cls('expires')}" type="date" name="expires" value="${esc(d.expires)}"></label>
       </div>
-      <label class="field"><span>Viagem</span><select class="inp" name="tripId"><option value="">Pessoal (todas as viagens)</option>${tripsSorted().map(t => `<option value="${t.id}" ${d.tripId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
-      <label class="field"><span>Observações</span><textarea class="inp" name="notes" placeholder="Ex.: original fica na pasta azul, levar cópia autenticada">${esc(d.notes)}</textarea></label>
+      <label class="field"><span>Viagem</span><select class="inp${matched ? ' auto' : ''}" name="tripId"><option value="">Pessoal (todas as viagens)</option>${tripsSorted().map(t => `<option value="${t.id}" ${d.tripId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+      <label class="field"><span>Observações</span><textarea class="inp${cls('notes')}" name="notes" placeholder="Ex.: original fica na pasta azul, levar cópia autenticada">${esc(d.notes)}</textarea></label>
       <label class="switch"><input type="checkbox" name="pinned" ${d.pinned ? 'checked' : ''}>Mostrar em “À mão”, no topo da tela inicial</label>
       ${doc ? `<div class="row-btns"><button type="button" class="btn danger sm" data-act="del-doc" data-id="${d.id}">Excluir documento</button></div>` : ''}
     </div>
     <div class="sheet-f"><button type="button" class="btn ghost" data-act="close">Cancelar</button><button class="btn primary grow">Salvar documento</button></div>
   </form>`;
   drawFiles();
-  dlg.showModal();
+  if (!dlg.open) dlg.showModal();
+}
+
+/* Arquivo adicionado depois: lê e completa só os campos vazios */
+async function readIntoForm(files){
+  const form = $('[data-form=doc]'), st = $('#pickstatus'); if (!form) return;
+  const type = new FormData(form).get('type') || 'other';
+  try {
+    const r = await Extract.read(files, type, m => { if (st) st.textContent = m });
+    let n = 0;
+    for (const k of ['title', 'number', 'holder', 'expires', 'notes']) {
+      const inp = form.elements[k];
+      if (r[k] && inp && !inp.value.trim()) { inp.value = r[k]; inp.classList.add('auto'); n++ }
+    }
+    if (r.text) draftText = (draftText + '\n' + r.text).slice(0, 8000);
+    if (st) st.textContent = n ? `Preenchi ${n === 1 ? '1 campo' : `${n} campos`} a partir do arquivo.` : '';
+  } catch { if (st) st.textContent = '' }
 }
 
 function drawFiles(){
@@ -512,9 +610,10 @@ async function saveDoc(form){
     notes: fd.get('notes').trim(),
     pinned: fd.get('pinned') === 'on',
     files: draftFiles,
+    text: draftText || old?.text || '',
     updatedAt: Date.now(),
   };
-  if (d.holder) store.set('carimbo.holder', d.holder);
+  if (d.holder && (type === 'passport' || type === 'id')) store.set('carimbo.holder', d.holder);
   try { await dbPut('docs', d) } catch (e) { return toast('Não foi possível salvar: espaço cheio no aparelho') }
   state.docs = state.docs.filter(x => x.id !== id).concat(d);
   $('#form').close(); render(); toast(old ? 'Documento atualizado' : 'Documento salvo');
@@ -586,6 +685,7 @@ function drawViewer(){
           ${trip ? `<div class="fact"><small>Viagem</small><b>${esc(trip.name)}</b></div>` : ''}
           ${d.notes ? `<div class="fact wide"><small>Observações</small><b class="notes">${esc(d.notes)}</b></div>` : ''}
         </div>
+        ${presenting ? '' : `<div class="row-btns"><button class="btn danger sm" data-act="del-doc" data-id="${d.id}">Excluir documento</button></div>`}
       </div>
     </div>
     ${seq.length > 1 ? `<div class="v-f"><button class="btn ghost sm" data-act="prev" ${pos ? '' : 'disabled'} aria-label="Documento anterior">‹ Anterior</button><span class="count">${pos + 1} de ${seq.length}</span><button class="btn ghost sm" data-act="nextdoc" ${pos < seq.length - 1 ? '' : 'disabled'} aria-label="Próximo documento">Próximo ›</button></div>` : ''}
@@ -661,12 +761,15 @@ document.addEventListener('click', async e => {
   if (act === 'check') return; // tratado no change
   switch (act) {
     case 'filter': setFilter(id); break;
-    case 'new-doc': openDocForm(); break;
+    case 'new-doc': openNewDoc(); break;
+    case 'kind': pendingKind = id; if (id !== 'other') Extract.warm(); $('[data-kindfile]').click(); break;
+    case 'kind-blank': openDocForm(null); break;
+    case 'skip-read': readToken++; openDocForm(null, { type: pendingKind, files: skipFiles, filled: [], skipped: true }); break;
     case 'new-trip': openTripForm(); break;
     case 'edit-trip': openTripForm(state.trips.find(t => t.id === id)); break;
     case 'settings': openSettings(); break;
     case 'export': exportAll(); break;
-    case 'close': { const d = b.closest('dialog'); d.id === 'viewer' ? closeViewer() : d.close(); break }
+    case 'close': { const d = b.closest('dialog'); if (d.id === 'viewer') closeViewer(); else { readToken++; d.close() } break }
     case 'open': {
       openViewer([id], 0, false); break;
     }
@@ -682,7 +785,7 @@ document.addEventListener('click', async e => {
     case 'rm-file': draftFiles.splice(+b.dataset.i, 1); drawFiles(); break;
     case 'del-doc':
       if (!confirm('Excluir este documento e os arquivos dele? Isso não pode ser desfeito.')) return;
-      await dbDel('docs', id); state.docs = state.docs.filter(d => d.id !== id); $('#form').close(); render(); toast('Documento excluído'); break;
+      await dbDel('docs', id); state.docs = state.docs.filter(d => d.id !== id); if ($('#form').open) $('#form').close(); if ($('#viewer').open) closeViewer(); render(); toast('Documento excluído'); break;
     case 'del-trip': {
       if (!confirm('Excluir esta viagem? Os documentos dela passam para Pessoais.')) return;
       for (const d of state.docs.filter(d => d.tripId === id)) { d.tripId = ''; await dbPut('docs', d) }
@@ -703,9 +806,12 @@ document.addEventListener('change', async e => {
     const c = t.checklist.find(c => c.id === el.dataset.id); c.done = el.checked; updateTrip(t);
   }
   if (el.matches('[data-pick]')) {
-    for (const f of el.files) draftFiles.push(await prepFile(f));
-    el.value = ''; drawFiles();
+    const added = [];
+    for (const f of el.files) added.push(await prepFile(f));
+    el.value = ''; draftFiles.push(...added); drawFiles();
+    if (added.length) readIntoForm(added);
   }
+  if (el.matches('[data-kindfile]') && el.files.length) { const fl = [...el.files]; el.value = ''; readNewDoc(fl) }
   if (el.matches('[data-import]') && el.files[0]) importAll(el.files[0]);
   if (el.matches('[name=type]')) { const ti = el.form.title; ti.placeholder = TYPES[el.value].l }
 });
