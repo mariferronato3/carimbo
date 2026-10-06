@@ -1,4 +1,4 @@
-const V = 'carimbo-v18';
+const V = 'carimbo-v19';
 const SHELL = ['./', './index.html', './extract.js', './sync.js', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-512.png'];
 // Leitor de documentos: grande, então é guardado sem travar a instalação
 const VENDOR = ['tesseract.min.js', 'worker.min.js', 'tesseract-core-lstm.wasm.js', 'tesseract-core-simd-lstm.wasm.js',
@@ -33,15 +33,21 @@ self.addEventListener('fetch', e => {
       })));
       return;
     }
-    // App: responde do cache na hora e atualiza em segundo plano
+    // App: com internet, abre sempre a versão mais nova; sem internet (ou rede lenta, 3 s), usa a guardada
     e.respondWith((async () => {
-      const hit = await caches.match(r, { ignoreSearch: true })
-        || (r.mode === 'navigate' ? await caches.match('./index.html') : undefined);
+      const cached = () => caches.match(r, { ignoreSearch: true })
+        .then(hit => hit || (r.mode === 'navigate' ? caches.match('./index.html') : undefined));
       const net = fetch(r, { cache: 'no-cache' }).then(res => {
         if (res.ok) { const cp = res.clone(); caches.open(V).then(c => c.put(r, cp)); }
         return res;
-      }).catch(() => hit || Response.error());
-      return hit || net;
+      });
+      const slow = new Promise(res => setTimeout(res, 3000)).then(cached);
+      try {
+        const first = await Promise.race([net, slow]);
+        return first || await net;
+      } catch {
+        return (await cached()) || Response.error();
+      }
     })());
     return;
   }
