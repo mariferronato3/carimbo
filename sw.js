@@ -1,4 +1,4 @@
-const V = 'carimbo-v9';
+const V = 'carimbo-v10';
 const SHELL = ['./', './index.html', './extract.js', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-512.png'];
 // Leitor de documentos: grande, então é guardado sem travar a instalação
 const VENDOR = ['tesseract.min.js', 'worker.min.js', 'tesseract-core-lstm.wasm.js', 'tesseract-core-simd-lstm.wasm.js',
@@ -6,8 +6,9 @@ const VENDOR = ['tesseract.min.js', 'worker.min.js', 'tesseract-core-lstm.wasm.j
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(async c => {
-    await c.addAll(SHELL);
-    await Promise.all(VENDOR.map(u => c.add(u).catch(() => {})));
+    // cache: reload ignora a cópia guardada pelo navegador (o GitHub guarda por 10 min)
+    await c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })));
+    await Promise.all(VENDOR.map(u => c.add(new Request(u, { cache: 'reload' })).catch(() => {})));
   }).then(() => self.skipWaiting()));
 });
 
@@ -36,7 +37,7 @@ self.addEventListener('fetch', e => {
     e.respondWith((async () => {
       const hit = await caches.match(r, { ignoreSearch: true })
         || (r.mode === 'navigate' ? await caches.match('./index.html') : undefined);
-      const net = fetch(r).then(res => {
+      const net = fetch(r, { cache: 'no-cache' }).then(res => {
         if (res.ok) { const cp = res.clone(); caches.open(V).then(c => c.put(r, cp)); }
         return res;
       }).catch(() => hit || Response.error());
