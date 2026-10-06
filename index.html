@@ -596,7 +596,8 @@ async function readNewDoc(fileList, existing){
   if (token !== readToken) return;
   if (existing) {
     // Mantém o que já estava preenchido; completa o resto
-    const has = (k, v) => v && !(k === 'title' && v === TYPES[existing.type]?.l);
+    // título genérico ("Passagem", "Outro"...) pode ser trocado pelo que foi lido
+    const has = (k, v) => v && !(k === 'title' && Object.values(TYPES).some(t => t.l === v));
     const keep = Object.fromEntries(['title', 'number', 'holder', 'expires', 'notes'].map(k => [k, has(k, existing[k]) ? existing[k] : res[k]]));
     const x = { ...res.x }; for (const [k, v] of Object.entries(existing.x || {})) if (v) x[k] = v;
     const filled = res.filled.filter(k => k.startsWith('x.') ? x[k.slice(2)] === res.x[k.slice(2)] : keep[k] === res[k]);
