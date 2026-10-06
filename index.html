@@ -94,7 +94,18 @@ h2.sec .link{margin-left:auto;font-size:15px;font-weight:600;color:var(--stamp);
 .list{display:grid;gap:10px}
 .doc{display:grid;grid-template-columns:56px 1fr;gap:4px 14px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 14px 0;box-shadow:var(--shadow);overflow:hidden;position:relative}
 .doc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--tc)}
-.thumb{width:56px;height:56px;border-radius:12px;background:var(--sunk);display:grid;place-items:center;overflow:hidden;color:var(--tc);font-weight:800;font-size:20px}
+.thumb{width:56px;height:56px;border-radius:14px;background:color-mix(in srgb,var(--tc) 12%,var(--card));display:grid;place-items:center;color:var(--tc)}
+.thumb .ti{width:28px;height:28px}
+.tile .big-ic{position:absolute;right:-6px;bottom:-10px;left:auto;width:96px;height:96px;opacity:.22;color:#fff}
+.tile .big-ic .ti{width:100%;height:100%}
+h2.sec .gi{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:color-mix(in srgb,var(--tc) 12%,var(--card));color:var(--tc);align-self:center}
+h2.sec .gi .ti{width:17px;height:17px}
+.kind .ki{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;flex:none;background:color-mix(in srgb,var(--tc) 12%,var(--card));color:var(--tc)}
+.kind .ki .ti{width:22px;height:22px}
+.types span .ti{width:17px;height:17px;color:var(--tc)}
+.types input:checked+span .ti{color:inherit}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) :is(.thumb,h2.sec .gi,.kind .ki,.types span .ti){color:color-mix(in srgb,var(--tc) 45%,#fff)}}
+:root[data-theme=dark] :is(.thumb,h2.sec .gi,.kind .ki,.types span .ti){color:color-mix(in srgb,var(--tc) 45%,#fff)}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .doc-main{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px}
 .doc-title{font-weight:600;font-size:17px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -104,6 +115,9 @@ h2.sec .link{margin-left:auto;font-size:15px;font-weight:600;color:var(--stamp);
 .tag.ok{background:var(--ok-soft);color:var(--ok)}
 .tag.warn{background:var(--warn-soft);color:var(--warn)}
 .tag.bad{background:var(--bad-soft);color:var(--bad)}
+.doc.plain{padding-bottom:14px}
+.group h2.sec{margin-top:24px}
+h2.sec small{font-size:14px;font-weight:600;color:var(--ink-3)}
 .mrz{grid-column:1/-1;margin:12px -14px 0;padding:7px 14px 8px;border-top:1px dashed var(--line);font-family:var(--mono);font-size:12px;letter-spacing:.18em;color:var(--ink-3);white-space:nowrap;overflow:hidden}
 
 /* Viagem */
@@ -165,7 +179,6 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .types label{position:relative}
 .types input{position:absolute;opacity:0}
 .types span{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-weight:500;font-size:15px}
-.types span::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--tc)}
 .types input:checked+span{border-color:var(--ink);background:var(--ink);color:var(--paper)}
 .types input:focus-visible+span{outline:3px solid var(--stamp);outline-offset:2px}
 .switch{display:flex;align-items:center;gap:12px;margin-top:16px;font-weight:500}
@@ -181,7 +194,6 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .lead{color:var(--ink-2);margin:0 0 14px}
 .kinds{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .kind{min-height:64px;border-radius:16px;border:1px solid var(--line);background:var(--card);text-align:left;padding:12px 14px;font-weight:600;font-size:16px;line-height:1.2;display:flex;align-items:center;gap:10px}
-.kind i{width:12px;height:12px;border-radius:50%;background:var(--tc);flex:none}
 .kind:active{background:var(--sunk)}
 .link-plain{display:block;background:none;border:0;color:var(--stamp);font-weight:600;padding:14px 0 4px;margin:4px auto 0}
 .reading{text-align:center;padding:28px 8px 20px}
@@ -281,6 +293,18 @@ const TYPES = {
   other:     { l:'Outro',                 c:'D', col:'#6B7280' },
 };
 const ORDER = Object.keys(TYPES);
+const TYPE_ICONS = {
+  passport:  '<rect x="5" y="2.5" width="14" height="19" rx="2"/><circle cx="12" cy="10" r="3.6"/><path d="M8.4 10h7.2M12 6.4c1.3 1.1 1.3 6.1 0 7.2M12 6.4c-1.3 1.1-1.3 6.1 0 7.2M9 17.5h6"/>',
+  visa:      '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.8" stroke-dasharray="2.2 2"/><path d="M9.6 12.2l1.7 1.7 3.2-3.6"/>',
+  id:        '<rect x="2.5" y="5" width="19" height="14" rx="2.2"/><circle cx="8.5" cy="10.8" r="2.2"/><path d="M5.4 16.2c.6-1.7 1.7-2.6 3.1-2.6s2.5.9 3.1 2.6M14.5 10h4.5M14.5 13.5h3.5"/>',
+  ticket:    '<path d="M10.5 3.6a1.5 1.5 0 0 1 3 0V9l7.5 4.5v2l-7.5-2.2V18l2 1.6V21L12 20l-3.5 1v-1.4l2-1.6v-4.7L3 15.5v-2L10.5 9z"/>',
+  stay:      '<path d="M3 18.5v-13M3 14.5h18v4M21 14.5v-2.8a3 3 0 0 0-3-3h-6.5v5.8"/><circle cx="7.2" cy="11" r="2"/>',
+  insurance: '<path d="M12 2.8l7.5 3v6c0 4.6-3.2 8.1-7.5 9.4-4.3-1.3-7.5-4.8-7.5-9.4v-6z"/><path d="M9 12l2.1 2.1L15 10.2"/>',
+  money:     '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.8"/><path d="M6 9.5v5M18 9.5v5"/>',
+  health:    '<path d="M9.5 3.5h5v6h6v5h-6v6h-5v-6h-6v-5h6z"/>',
+  other:     '<path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5M9 12.5h6M9 16h6"/>',
+};
+const typeIcon = k => `<svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TYPE_ICONS[k] || TYPE_ICONS.other}</svg>`;
 const CHECK_TEMPLATE = [
   'Passaporte com 6+ meses de validade',
   'Formulário do visto preenchido e impresso',
@@ -348,7 +372,7 @@ function mrz(d){
 
 const urls = new WeakMap();
 const blobUrl = b => { if (!urls.has(b)) urls.set(b, URL.createObjectURL(b)); return urls.get(b) };
-const firstImg = d => (d.files || []).find(f => f.type.startsWith('image/'));
+const pic = d => { const fs = d.files || []; return fs.find(f => f.type.startsWith('image/'))?.blob || fs.find(f => f.thumb)?.thumb };
 
 /* ---------- Render ---------- */
 function sortDocs(a, b){
@@ -374,16 +398,16 @@ function renderNext(){
 }
 
 function docCard(d){
-  const t = TYPES[d.type] || TYPES.other, st = status(d), img = firstImg(d);
+  const t = TYPES[d.type] || TYPES.other, st = status(d);
   const trip = d.tripId && state.trips.find(x => x.id === d.tripId);
-  return `<button class="doc" style="--tc:${t.col}" data-act="open" data-id="${d.id}">
-    <span class="thumb">${img ? `<img src="${blobUrl(img.blob)}" alt="" loading="lazy">` : t.c}</span>
+  return `<button class="doc${d.number ? '' : ' plain'}" style="--tc:${t.col}" data-act="open" data-id="${d.id}">
+    <span class="thumb">${typeIcon(d.type)}</span>
     <span class="doc-main">
       <span class="doc-title">${esc(d.title)}</span>
       ${d.number ? `<span class="doc-num">${esc(d.number)}</span>` : ''}
       <span class="tags">${st ? `<span class="tag ${st.k}">${st.t}</span>` : ''}${state.filter === 'all' && trip ? `<span class="tag">${esc(trip.name)}</span>` : ''}${(d.files||[]).length > 1 ? `<span class="tag">${d.files.length} arquivos</span>` : ''}</span>
     </span>
-    <span class="mrz" aria-hidden="true">${esc(mrz(d))}</span>
+    ${d.number ? `<span class="mrz" aria-hidden="true">${esc(mrz(d))}</span>` : ''}
   </button>`;
 }
 
@@ -418,13 +442,16 @@ function render(){
     const pinned = docs.filter(d => d.pinned);
     if (pinned.length) {
       h += `<h2 class="sec">À mão <button class="link" data-act="present" data-id="pinned">Apresentar</button></h2>
-      <div class="hand">${pinned.map(d => { const t = TYPES[d.type] || TYPES.other, img = firstImg(d);
-        return `<button class="tile" style="--tc:${t.col}" data-act="open" data-id="${d.id}">${img ? `<img src="${blobUrl(img.blob)}" alt="">` : ''}<span class="t">${esc(d.title)}</span><span class="n">${esc(d.number || t.l)}</span></button>` }).join('')}</div>`;
+      <div class="hand">${pinned.map(d => { const t = TYPES[d.type] || TYPES.other, img = pic(d);
+        return `<button class="tile" style="--tc:${t.col}" data-act="open" data-id="${d.id}">${img ? `<img src="${blobUrl(img)}" alt="">` : `<span class="big-ic">${typeIcon(d.type)}</span>`}<span class="t">${esc(d.title)}</span><span class="n">${esc(d.number || t.l)}</span></button>` }).join('')}</div>`;
     }
   }
 
   if (docs.length) {
-    h += `<h2 class="sec">${trip ? 'Documentos da viagem' : 'Documentos'}</h2><div class="list">${docs.map(docCard).join('')}</div>`;
+    h += ORDER.filter(k => docs.some(d => d.type === k)).map(k => {
+      const group = docs.filter(d => d.type === k);
+      return `<section class="group" style="--tc:${TYPES[k].col}"><h2 class="sec"><span class="gi">${typeIcon(k)}</span>${TYPES[k].l}<small>${group.length}</small></h2><div class="list">${group.map(docCard).join('')}</div></section>`;
+    }).join('');
   } else {
     h += `<div class="empty">
       <svg viewBox="0 0 120 120" aria-hidden="true"><g transform="rotate(-12 60 60)" fill="none" stroke="currentColor"><circle cx="60" cy="60" r="44" stroke-width="5"/><circle cx="60" cy="60" r="33" stroke-width="2" stroke-dasharray="5 4"/></g><text x="60" y="66" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="15" font-weight="600" fill="currentColor" transform="rotate(-12 60 60)">VAZIO</text></svg>
@@ -470,7 +497,7 @@ function openNewDoc(){
     <div class="sheet-h"><h2>Que documento é?</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
     <div class="sheet-b">
       <p class="lead">Escolha o tipo e depois tire uma foto ou escolha o PDF. O Carimbo lê e preenche o resto.</p>
-      <div class="kinds">${ORDER.map(k => `<button type="button" class="kind" style="--tc:${TYPES[k].col}" data-act="kind" data-id="${k}"><i></i>${TYPES[k].l}</button>`).join('')}</div>
+      <div class="kinds">${ORDER.map(k => `<button type="button" class="kind" style="--tc:${TYPES[k].col}" data-act="kind" data-id="${k}"><span class="ki">${typeIcon(k)}</span>${TYPES[k].l}</button>`).join('')}</div>
       <input type="file" accept="image/*,application/pdf" multiple class="sr" data-kindfile tabindex="-1" aria-hidden="true">
       <button type="button" class="link-plain" data-act="kind-blank">Preencher à mão, sem arquivo</button>
     </div></div>`;
@@ -478,7 +505,7 @@ function openNewDoc(){
 }
 
 /* Passo 2: ler o arquivo */
-async function readNewDoc(fileList){
+async function readNewDoc(fileList, existing){
   const token = ++readToken, type = pendingKind;
   const files = [];
   for (const f of fileList) files.push(await prepFile(f));
@@ -491,15 +518,20 @@ async function readNewDoc(fileList){
     <button type="button" class="link-plain" data-act="skip-read">Pular e preencher à mão</button>
   </div>`;
   $('#form h2').textContent = 'Novo documento';
-  skipFiles = files;
+  skipFiles = files; skipExisting = existing;
   let res = { filled: [] };
   try {
     res = await Extract.read(files, type, msg => { const s = $('#readstatus'); if (s && token === readToken) s.textContent = msg });
   } catch (e) { res = { filled: [], failed: true } }
   if (token !== readToken) return;
+  if (existing) {
+    // Mantém o que já estava preenchido; completa o resto
+    const keep = Object.fromEntries(['title', 'number', 'holder', 'expires', 'notes'].map(k => [k, existing[k] && existing[k] !== TYPES[existing.type].l ? existing[k] : res[k]]));
+    return openDocForm({ ...existing, ...keep, files: existing.files }, { ...res, filled: res.filled.filter(k => keep[k] === res[k]), reread: true });
+  }
   openDocForm(null, { ...res, type, files });
 }
-let skipFiles = [];
+let skipFiles = [], skipExisting = null;
 
 function matchTrip(dates){
   if (!dates?.length) return '';
@@ -523,7 +555,7 @@ function openDocForm(doc, pre){
   draftText = pre?.text || '';
   const auto = new Set(pre?.filled || []);
   const cls = k => auto.has(k) ? ' auto' : '';
-  const matched = pre && !filterTrip && d.tripId;
+  const matched = pre && !doc && !filterTrip && d.tripId;
   const dlg = $('#form');
   dlg.innerHTML = `<form class="sheet" data-form="doc" data-id="${d.id}">
     <div class="sheet-h"><h2>${doc ? 'Editar documento' : 'Novo documento'}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
@@ -540,7 +572,7 @@ function openDocForm(doc, pre){
         <small id="pickstatus" role="status"></small>
       </div>
       <fieldset class="field" style="border:0;padding:0;margin-inline:0"><legend style="font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Tipo</legend>
-        <div class="types">${ORDER.map(k => `<label style="--tc:${TYPES[k].col}"><input type="radio" name="type" value="${k}" ${d.type === k ? 'checked' : ''}><span>${TYPES[k].l}</span></label>`).join('')}</div>
+        <div class="types">${ORDER.map(k => `<label style="--tc:${TYPES[k].col}"><input type="radio" name="type" value="${k}" ${d.type === k ? 'checked' : ''}><span>${typeIcon(k)}${TYPES[k].l}</span></label>`).join('')}</div>
       </fieldset>
       <label class="field"><span>Nome do documento</span><input class="inp${cls('title')}" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
       <label class="field"><span>Número</span><input class="inp mono${cls('number')}" name="number" value="${esc(d.number)}" placeholder="FX123456" autocomplete="off" autocapitalize="characters" spellcheck="false">
@@ -613,6 +645,7 @@ async function saveDoc(form){
     text: draftText || old?.text || '',
     updatedAt: Date.now(),
   };
+  for (const f of d.files) if (f.type === 'application/pdf' && !f.thumb) f.thumb = await Extract.pdfThumb(f.blob).catch(() => null);
   if (d.holder && (type === 'passport' || type === 'id')) store.set('carimbo.holder', d.holder);
   try { await dbPut('docs', d) } catch (e) { return toast('Não foi possível salvar: espaço cheio no aparelho') }
   state.docs = state.docs.filter(x => x.id !== id).concat(d);
@@ -685,7 +718,7 @@ function drawViewer(){
           ${trip ? `<div class="fact"><small>Viagem</small><b>${esc(trip.name)}</b></div>` : ''}
           ${d.notes ? `<div class="fact wide"><small>Observações</small><b class="notes">${esc(d.notes)}</b></div>` : ''}
         </div>
-        ${presenting ? '' : `<div class="row-btns"><button class="btn danger sm" data-act="del-doc" data-id="${d.id}">Excluir documento</button></div>`}
+        ${presenting ? '' : `<div class="row-btns">${files.length ? `<button class="btn ghost sm" data-act="reread" data-id="${d.id}">Ler o documento de novo</button>` : ''}<button class="btn danger sm" data-act="del-doc" data-id="${d.id}">Excluir documento</button></div>`}
       </div>
     </div>
     ${seq.length > 1 ? `<div class="v-f"><button class="btn ghost sm" data-act="prev" ${pos ? '' : 'disabled'} aria-label="Documento anterior">‹ Anterior</button><span class="count">${pos + 1} de ${seq.length}</span><button class="btn ghost sm" data-act="nextdoc" ${pos < seq.length - 1 ? '' : 'disabled'} aria-label="Próximo documento">Próximo ›</button></div>` : ''}
@@ -764,7 +797,7 @@ document.addEventListener('click', async e => {
     case 'new-doc': openNewDoc(); break;
     case 'kind': pendingKind = id; if (id !== 'other') Extract.warm(); $('[data-kindfile]').click(); break;
     case 'kind-blank': openDocForm(null); break;
-    case 'skip-read': readToken++; openDocForm(null, { type: pendingKind, files: skipFiles, filled: [], skipped: true }); break;
+    case 'skip-read': readToken++; skipExisting ? openDocForm(skipExisting) : openDocForm(null, { type: pendingKind, files: skipFiles, filled: [], skipped: true }); break;
     case 'new-trip': openTripForm(); break;
     case 'edit-trip': openTripForm(state.trips.find(t => t.id === id)); break;
     case 'settings': openSettings(); break;
@@ -781,6 +814,11 @@ document.addEventListener('click', async e => {
     case 'prev': if (pos > 0) { pos--; drawViewer() } break;
     case 'nextdoc': if (pos < seq.length - 1) { pos++; drawViewer() } break;
     case 'edit-doc': closeViewer(); openDocForm(state.docs.find(d => d.id === id)); break;
+    case 'reread': {
+      const doc = state.docs.find(d => d.id === id); closeViewer();
+      pendingKind = doc.type; openNewDoc(); readNewDoc(doc.files.map(f => f.blob instanceof File ? f.blob : new File([f.blob], f.name, { type: f.type })), doc);
+      break;
+    }
     case 'copy': try { await navigator.clipboard.writeText(b.dataset.v); toast('Número copiado') } catch { toast('Não foi possível copiar') } break;
     case 'rm-file': draftFiles.splice(+b.dataset.i, 1); drawFiles(); break;
     case 'del-doc':
@@ -855,7 +893,23 @@ async function load(){
 }
 load().catch(() => { $('#app').innerHTML = '<div class="empty"><h3>Armazenamento indisponível</h3><p>Abra o Carimbo fora da janela anônima para guardar documentos neste aparelho.</p></div>' });
 if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
-if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  const hadSW = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadSW && !document.querySelector('dialog[open]')) location.reload();
+  });
+}
+async function backfillThumbs(){
+  for (const d of state.docs) {
+    const pdfs = (d.files || []).filter(f => f.type === 'application/pdf' && !f.thumb);
+    if (!pdfs.length) continue;
+    for (const f of pdfs) f.thumb = await Extract.pdfThumb(f.blob).catch(() => null);
+    await dbPut('docs', d).catch(() => {});
+  }
+  render();
+}
+setTimeout(() => backfillThumbs().catch(() => {}), 1500);
 </script>
 </body>
 </html>

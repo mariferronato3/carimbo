@@ -54,6 +54,37 @@ async function ocrText(src){
   return data.text || '';
 }
 
+// Lê a página inteira uma vez e devolve também as linhas com posição
+async function ocrPage(src, maxW = 2400){
+  const w = await ocr();
+  await w.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
+  const c = await toCanvas(src, { maxW });
+  const { data } = await w.recognize(c, {}, { text: true, blocks: true });
+  const lines = (data.blocks || []).flatMap(b => (b.paragraphs || []).flatMap(p => p.lines || []));
+  return { c, text: data.text || '', lines };
+}
+
+// Acha a faixa MRZ na página lida e relê só esse pedaço, ampliado
+async function mrzFromPage(pg){
+  const cand = pg.lines.filter(l => {
+    const t = (l.text || '').replace(/\s/g, '');
+    return t.length >= 20 && (/<{2,}|«|K<|<K/.test(t) || /^[A-Z0-9<]{25,}$/.test(t));
+  });
+  if (!cand.length) return null;
+  const x0 = Math.min(...cand.map(l => l.bbox.x0)), y0 = Math.min(...cand.map(l => l.bbox.y0));
+  const x1 = Math.max(...cand.map(l => l.bbox.x1)), y1 = Math.max(...cand.map(l => l.bbox.y1));
+  const pad = Math.max(12, (y1 - y0) * .35);
+  const bx = Math.max(0, x0 - pad), by = Math.max(0, y0 - pad);
+  const bw = Math.min(pg.c.width, x1 + pad) - bx, bh = Math.min(pg.c.height, y1 + pad) - by;
+  const s = Math.min(3, 2200 / bw);
+  const k = document.createElement('canvas'); k.width = Math.round(bw * s); k.height = Math.round(bh * s);
+  k.getContext('2d').drawImage(pg.c, bx, by, bw, bh, 0, 0, k.width, k.height);
+  const w = await ocr();
+  await w.setParameters({ tessedit_char_whitelist: MRZ_CHARS, tessedit_pageseg_mode: '6' });
+  const { data } = await w.recognize(k);
+  return parseMRZ(data.text || '');
+}
+
 /* ---------- Faixa MRZ (passaporte, visto, RG novo) ---------- */
 const MRZ_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<';
 const D2 = { O:'0', Q:'0', D:'0', U:'0', I:'1', L:'1', Z:'2', S:'5', B:'8', G:'6', T:'7', A:'4', '<':'0' };
@@ -127,13 +158,12 @@ function parseMRZ(text){
   return null;
 }
 
-async function readMRZ(src, status){
+async function readMRZ(src, status, tries){
   const w = await ocr();
   await w.setParameters({ tessedit_char_whitelist: MRZ_CHARS, tessedit_pageseg_mode: '6' });
-  const tries = [{ crop: [.55, 1] }, { crop: [.3, 1] }, {}, { rotate: 90 }, { rotate: 270 }];
-  for (const [n, t] of tries.entries()) {
-    if (n === 3) status?.('Procurando com a foto girada…');
-    const { data } = await w.recognize(await toCanvas(src, { ...t, maxW: 1800 }));
+  for (const t of tries) {
+    if (t.rotate === 90) status?.('Procurando com a imagem girada…');
+    const { data } = await w.recognize(await toCanvas(src, t));
     const m = parseMRZ(data.text || '');
     if (m) return m;
   }
@@ -175,7 +205,8 @@ function findDates(text){
   while ((m = r1.exec(text))) push(iso(fullYear(+m[3]), +m[2], +m[1]), m.index);
   const r2 = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
   while ((m = r2.exec(text))) push(iso(+m[1], +m[2], +m[3]), m.index);
-  const r3 = /\b(\d{1,2})\s*(?:de\s+)?([A-Za-zçÇ]{3,9})\.?\s*(?:de\s+)?,?\s*(\d{4})\b/g;
+  // inclui o formato bilíngue do passaporte: "11 FEV/FEB 2021"
+  const r3 = /\b(\d{1,2})\s*(?:de\s+)?([A-Za-zçÇ]{3,9})(?:\/[A-Za-z]{3,9})?\.?\s*(?:de\s+)?,?\s*(\d{4})\b/g;
   while ((m = r3.exec(text))) { const mo = MONTH[m[2].slice(0, 3).toLowerCase()]; if (mo) push(iso(+m[3], mo, +m[1]), m.index) }
   const r4 = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/g;
   while ((m = r4.exec(text))) { const mo = MONTH[m[1].slice(0, 3).toLowerCase()]; if (mo) push(iso(+m[3], mo, +m[2]), m.index) }
@@ -212,7 +243,12 @@ function holderFrom(text){
 
 function fromText(type, text){
   const r = {}, dates = findDates(text), fut = future(dates), T = text;
-  const exp = near(dates, /(validade|v[áa]lid[oa]\s+at[ée]|valid\s+(?:until|thru|through)|expira|expiry|expiration|vencimento|data\s+de\s+validade)\s*[:\-]?\s*$/i);
+  // rótulo e valor podem estar em linhas diferentes (comum em PDF e OCR)
+  const exp = near(dates, /(validade|v[áa]lid[oa]\s+at[ée]|valid\s+(?:until|thru|through)|expira|expiry|expiration|vencimento)[\s\S]{0,30}$/i);
+  if (MRZ_TYPES.has(type)) {
+    r.issued = near(dates, /(expedi[çc][ãa]o|emiss[ãa]o|issue|issued|d[ée]livrance)[\s\S]{0,30}$/i);
+    r.birth = near(dates, /(nascimento|birth|naissance)[\s\S]{0,30}$/i);
+  }
   switch (type) {
     case 'ticket': {
       r.number = grab(T, /(?:localizador|c[óo]digo\s+(?:de\s+)?(?:reserva|confirma[çc][ãa]o)|booking\s+(?:reference|code|ref\.?)|record\s+locator|reservation\s+(?:code|number)|confirmation\s+(?:code|number)|pnr|reserva)\s*(?:n[º°o.]*)?\s*[:#\-]?\s*\n?\s*([A-Z0-9]{6})\b/i, upperCode);
@@ -294,69 +330,115 @@ function fromText(type, text){
 }
 
 /* ---------- Ponto de entrada ---------- */
-async function textAndImage(file, status){
-  if (file.type === 'application/pdf') {
-    status('Lendo o PDF…');
-    const lib = await pdfjs();
-    const pdf = await lib.getDocument({ data: new Uint8Array(await file.blob.arrayBuffer()), isEvalSupported: false }).promise;
-    let text = '';
-    for (let p = 1; p <= Math.min(pdf.numPages, 6); p++) {
-      const tc = await (await pdf.getPage(p)).getTextContent();
-      for (const it of tc.items) if ('str' in it) text += it.str + (it.hasEOL ? '\n' : ' ');
-      text += '\n';
-    }
-    if (text.replace(/\s/g, '').length > 40) return { text };
-    // PDF escaneado: transforma a 1ª página em imagem
-    const page = await pdf.getPage(1), vp = page.getViewport({ scale: 2.2 });
-    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
-    await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
-    return { image: c };
+async function openPdf(file){
+  const lib = await pdfjs();
+  return lib.getDocument({ data: new Uint8Array(await file.blob.arrayBuffer()), isEvalSupported: false }).promise;
+}
+async function pdfText(pdf){
+  let text = '';
+  for (let p = 1; p <= Math.min(pdf.numPages, 6); p++) {
+    const tc = await (await pdf.getPage(p)).getTextContent();
+    for (const it of tc.items) if ('str' in it) text += it.str + (it.hasEOL ? '\n' : ' ');
+    text += '\n';
   }
-  if (file.type.startsWith('image/')) return { image: file.blob };
-  return {};
+  return text;
+}
+async function renderPage(pdf, n, width = 2400){
+  const page = await pdf.getPage(n);
+  const vp = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+  const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: g, viewport: vp }).promise;
+  return c;
+}
+// Miniatura da 1ª página, para o cartão do documento
+async function pdfThumb(blob){
+  const c = await renderPage(await openPdf({ blob }), 1, 360);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', .8));
 }
 
 const MRZ_TYPES = new Set(['passport', 'visa', 'id']);
+// Foto: a faixa costuma estar embaixo. PDF: o documento pode estar em qualquer lugar da página.
+const PHOTO_TRIES = [{ crop: [.55, 1], maxW: 1800 }, { crop: [.3, 1], maxW: 1800 }, { maxW: 2200 }, { rotate: 90, maxW: 2200 }, { rotate: 270, maxW: 2200 }];
+const PDF_FIRST = [{ maxW: 3000 }, { crop: [.5, 1], maxW: 2400 }, { rotate: 90, maxW: 3000 }, { rotate: 270, maxW: 3000 }];
+const PDF_REST = [{ maxW: 3000 }];
 
 async function read(files, type, status = () => {}){
-  const out = { filled: [] };
+  const out = { filled: [] }, mrzType = MRZ_TYPES.has(type);
   const set = (k, v) => { if (v && !out[k]) { out[k] = v; out.filled.push(k) } };
+  const applyMRZ = m => {
+    if (!m) return false;
+    set('number', m.number); set('holder', m.holder); set('expires', m.expires);
+    const nat = PLACES[m.nationality]?.[0], place = PLACES[m.country]?.[1];
+    if (type === 'passport') set('title', nat ? `Passaporte ${nat}` : 'Passaporte');
+    if (type === 'visa') set('title', place ? `Visto ${place}` : 'Visto');
+    if (type === 'id' && m.kind === 'I') set('title', 'Carteira de identidade');
+    out.birth ||= m.birth; out.nationality ||= m.nationality;
+    out.mrz = true; out.numberOk = m.numberOk;
+    return true;
+  };
+  const engine = async () => { if (!ocrP) status('Preparando o leitor. Isso só demora na primeira vez…'); await ocr() };
   let allText = '';
   for (const f of files) {
-    const { text, image } = await textAndImage(f, status);
-    let t = text || '';
-    if (image) {
-      if (!ocrP) status('Preparando o leitor. Isso só demora na primeira vez…');
-      await ocr();
-      if (MRZ_TYPES.has(type) && !out.number) {
-        status(type === 'visa' ? 'Procurando a faixa de leitura do visto…' : 'Procurando a faixa de leitura do documento…');
-        const m = await readMRZ(image, status);
-        if (m) {
-          set('number', m.number); set('holder', m.holder); set('expires', m.expires);
-          const nat = PLACES[m.nationality]?.[0], place = PLACES[m.country]?.[1];
-          if (type === 'passport') set('title', nat ? `Passaporte ${nat}` : 'Passaporte');
-          if (type === 'visa') set('title', place ? `Visto ${place}` : 'Visto');
-          if (m.birth) out.birth = m.birth;
-          out.mrz = true; out.numberOk = m.numberOk;
+    const isPdf = f.type === 'application/pdf';
+    let t = '', pages = [];
+    if (isPdf) {
+      status('Lendo o PDF…');
+      const pdf = await openPdf(f);
+      t = await pdfText(pdf);
+      pages = Array.from({ length: Math.min(pdf.numPages, 3) }, (_, i) => () => renderPage(pdf, i + 1));
+      if (mrzType && !out.mrz) applyMRZ(parseMRZ(t));
+    } else if (f.type.startsWith('image/')) pages = [() => f.blob];
+
+    const noText = t.replace(/\s/g, '').length <= 40;
+    // Documento com faixa MRZ: lê a página, acha a faixa e amplia só ela
+    if (mrzType && !out.mrz && pages.length) {
+      await engine();
+      for (const [i, get] of pages.entries()) {
+        status(i ? `Procurando na página ${i + 1}…` : 'Lendo o documento…');
+        const pg = await ocrPage(await get(), isPdf ? 3000 : 2400);
+        if (noText) t = (t + '\n' + pg.text).trim();
+        if (applyMRZ(parseMRZ(pg.text))) break;
+        status('Lendo a faixa de códigos…');
+        if (applyMRZ(await mrzFromPage(pg))) break;
+        // Página quase sem texto legível: pode estar girada
+        if (i === 0 && pg.text.replace(/\s/g, '').length < 60) {
+          status('Procurando com a imagem girada…');
+          if (applyMRZ(await readMRZ(await get(), status, isPdf ? PDF_FIRST.slice(2) : PHOTO_TRIES.slice(3)))) break;
         }
       }
-      if (!t) { status(out.mrz ? 'Conferindo o nome no documento…' : 'Lendo o texto do documento…'); t = await ocrText(image) }
-      if (out.mrz && out.holder && t) out.holder = fixName(out.holder, t);
-    } else if (MRZ_TYPES.has(type) && t) {
-      const m = parseMRZ(t);
-      if (m) { set('number', m.number); set('holder', m.holder); set('expires', m.expires); out.mrz = true }
     }
+    // Outros documentos: texto do PDF; se não houver, OCR da imagem
+    if (!t.replace(/\s/g, '') && pages.length) {
+      await engine();
+      status('Lendo o texto do documento…');
+      t = await ocrText(await pages[0]());
+    }
+    if (out.mrz && out.holder && t) out.holder = fixName(out.holder, t);
     if (t) {
       allText += t + '\n';
       const r = fromText(type, t);
       for (const k of ['title', 'number', 'holder', 'expires', 'notes']) set(k, r[k]);
-      out.start ||= r.start; out.end ||= r.end;
+      out.start ||= r.start; out.end ||= r.end; out.issued ||= r.issued; out.birth ||= r.birth;
       out.dates = [...(out.dates || []), ...r.dates];
+    }
+  }
+  // Documentos pessoais: o resto do que foi lido vai para as observações
+  if (mrzType) {
+    const br = d => d.split('-').reverse().join('/');
+    const extra = [
+      out.birth && `Nascimento: ${br(out.birth)}`,
+      PLACES[out.nationality] && `Nacionalidade: ${PLACES[out.nationality][1]}`,
+      out.issued && `Emissão: ${br(out.issued)}`,
+    ].filter(Boolean);
+    if (extra.length) {
+      out.notes = [out.notes, ...extra].filter(Boolean).join('\n');
+      if (!out.filled.includes('notes')) out.filled.push('notes');
     }
   }
   out.text = allText.slice(0, 8000);
   return out;
 }
 
-window.Extract = { read, parseMRZ, fromText, findDates, warm: () => ocr().catch(() => {}) };
+window.Extract = { read, parseMRZ, fromText, findDates, pdfThumb, warm: () => ocr().catch(() => {}) };
 })();
