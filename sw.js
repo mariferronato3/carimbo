@@ -1,8 +1,8 @@
-const V = 'carimbo-v13';
-const SHELL = ['./', './index.html', './extract.js', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-512.png'];
+const V = 'carimbo-v15';
+const SHELL = ['./', './index.html', './extract.js', './sync.js', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-512.png'];
 // Leitor de documentos: grande, então é guardado sem travar a instalação
 const VENDOR = ['tesseract.min.js', 'worker.min.js', 'tesseract-core-lstm.wasm.js', 'tesseract-core-simd-lstm.wasm.js',
-  'lang/eng.traineddata.gz', 'lang/por.traineddata.gz', 'pdf.min.mjs', 'pdf.worker.min.mjs'].map(f => './vendor/' + f);
+  'lang/eng.traineddata.gz', 'lang/por.traineddata.gz', 'pdf.min.mjs', 'pdf.worker.min.mjs', 'supabase.js'].map(f => './vendor/' + f);
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(async c => {

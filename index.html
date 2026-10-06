@@ -276,6 +276,10 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .toast button{border:0;background:var(--stamp);color:var(--on-stamp);font-weight:700;border-radius:999px;padding:8px 14px}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 .settings p{color:var(--ink-2);margin:6px 0 0}
+.sync-err{color:var(--bad);font-weight:600}
+.sync-ok{color:var(--ok);font-weight:600}
+.fine-note{font-size:14px;color:var(--ink-2)}
+#syncbox .inp{margin-top:10px}
 .settings .group{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:12px}
 .settings h3{margin:0;font-size:17px}
 .meter{font-family:var(--mono);font-size:14px;color:var(--ink-2)}
@@ -291,8 +295,8 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
         <svg viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-14 20 20)" fill="none" stroke="var(--stamp)"><circle cx="20" cy="20" r="16" stroke-width="2.6"/><circle cx="20" cy="20" r="11.5" stroke-width="1.2" stroke-dasharray="2.4 2"/></g><path d="M14 24c2.6-7.6 10.6-10 14.6-6" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round"/></svg>
         Carimbo
       </h1>
-      <button class="icon-btn" data-act="settings" aria-label="Backup e ajustes">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+      <button class="icon-btn" data-act="settings" aria-label="Sincronizar, backup e ajustes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5H7z"/><path d="M10 13.5l2-2 2 2M12 11.5V16"/></svg>
       </button>
     </div>
     <p class="next" id="next"></p>
@@ -310,6 +314,7 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 <div class="toast" id="toast" role="status"></div>
 
 <script src="extract.js"></script>
+<script src="sync.js"></script>
 <script>
 /* ---------- Dados ---------- */
 const TYPES = {
@@ -376,11 +381,12 @@ const store = {
 
 /* IndexedDB: tudo fica só neste aparelho */
 const dbp = new Promise((res, rej) => {
-  const r = indexedDB.open('carimbo', 1);
+  const r = indexedDB.open('carimbo', 2);
   r.onupgradeneeded = () => {
     const db = r.result;
-    db.createObjectStore('docs',  { keyPath:'id' });
-    db.createObjectStore('trips', { keyPath:'id' });
+    if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs',  { keyPath:'id' });
+    if (!db.objectStoreNames.contains('trips')) db.createObjectStore('trips', { keyPath:'id' });
+    if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
   };
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -396,6 +402,13 @@ async function tx(name, mode, fn){
 const dbAll = n => tx(n, 'readonly', s => s.getAll());
 const dbPut = (n, v) => tx(n, 'readwrite', s => s.put(v));
 const dbDel = (n, id) => tx(n, 'readwrite', s => s.delete(id));
+const metaGet = k => tx('meta', 'readonly', s => s.get(k));
+const metaPut = (k, v) => tx('meta', 'readwrite', s => s.put(v, k));
+// O que a sincronização (sync.js) usa do app
+window.CarimboStore = {
+  dbAll, dbPut, dbDel, metaGet, metaPut, reload: () => load(),
+  getFlag: () => store.get('carimbo.sync') === '1', setFlag: on => store.set('carimbo.sync', on ? '1' : ''),
+};
 
 const state = { docs:[], trips:[], filter: store.get('carimbo.filter') || 'all' };
 
@@ -766,6 +779,7 @@ async function saveDoc(form){
   if (d.holder && (type === 'passport' || type === 'id')) store.set('carimbo.holder', d.holder);
   try { await dbPut('docs', d) } catch (e) { return toast('Não foi possível salvar: espaço cheio no aparelho') }
   state.docs = state.docs.filter(x => x.id !== id).concat(d);
+  Sync.changed();
   $('#form').close(); render(); toast(old ? 'Documento atualizado' : 'Documento salvo');
 }
 
@@ -793,13 +807,13 @@ function openTripForm(trip){
 async function saveTrip(form){
   const fd = new FormData(form), id = form.dataset.id, old = state.trips.find(t => t.id === id);
   const t = { ...(old || { checklist: fd.get('template') === 'on' ? CHECK_TEMPLATE.map(label => ({ id:uid(), label, done:false })) : [] }),
-    id, name: fd.get('name').trim(), start: fd.get('start'), end: fd.get('end'), notes: fd.get('notes').trim() };
-  await dbPut('trips', t);
+    id, name: fd.get('name').trim(), start: fd.get('start'), end: fd.get('end'), notes: fd.get('notes').trim(), updatedAt: Date.now() };
+  await dbPut('trips', t); Sync.changed();
   state.trips = state.trips.filter(x => x.id !== id).concat(t);
   setFilter(id); $('#form').close(); toast(old ? 'Viagem atualizada' : 'Viagem criada');
 }
 
-async function updateTrip(t){ await dbPut('trips', t); state.trips = state.trips.map(x => x.id === t.id ? t : x); render(); }
+async function updateTrip(t){ t.updatedAt = Date.now(); await dbPut('trips', t); Sync.changed(); state.trips = state.trips.map(x => x.id === t.id ? t : x); render(); }
 
 /* ---------- Visualizador / Modo apresentar ---------- */
 let seq = [], pos = 0, presenting = false, wake = null;
@@ -857,14 +871,76 @@ function drawViewer(){
   }, { passive:true });
 }
 
+/* ---------- Sincronização (tela) ---------- */
+let syncEmail = store.get('carimbo.email') || '', syncMode = store.get('carimbo.email') ? 'in' : 'up', syncSent = false;
+function renderSync(msg = ''){
+  const box = $('#syncbox'); if (!box) return;
+  const st = Sync.state;
+  const err = msg || st.error;
+  const note = err ? `<p class="sync-err" role="alert">${esc(err)}</p>` : '';
+  if (!st.signedIn || !st.unlocked) {
+    const up = syncMode === 'up' && !st.signedIn;
+    box.innerHTML = `<h3>Sincronizar entre aparelhos</h3>
+      ${syncSent ? `<p class="sync-ok">Enviei um e-mail de confirmação para ${esc(syncEmail)}. Abra o link do e-mail e depois volte aqui e toque em Entrar.</p>`
+        : `<p>${up ? 'Crie uma conta para ter os mesmos documentos no celular e no computador.' : 'Entre com seu e-mail e senha do Carimbo.'} Os documentos sobem trancados com a sua senha: ninguém mais consegue ler.</p>`}
+      ${st.signedIn ? `<p>Conectado como <b>${esc(st.email)}</b>. Digite a senha para abrir o cofre.</p>`
+        : `<input class="inp" id="syncemail" type="email" autocomplete="email" placeholder="seu@email.com" value="${esc(syncEmail)}">`}
+      <input class="inp" id="syncpass" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="${up ? 'Crie uma senha (mínimo 8 caracteres)' : 'Senha'}">
+      ${up ? `<input class="inp" id="syncpass2" type="password" autocomplete="new-password" placeholder="Repita a senha">
+      <p class="fine-note">Esta senha também tranca seus documentos. <b>Se esquecer, os documentos da nuvem não podem ser recuperados</b> (os deste aparelho continuam aqui). Guarde no gerenciador de senhas.</p>` : ''}
+      ${note}
+      <div class="row-btns">
+        <button class="btn primary sm" data-act="${up ? 'sync-up' : 'sync-in'}">${up ? 'Criar conta' : st.signedIn ? 'Abrir e sincronizar' : 'Entrar'}</button>
+        ${st.signedIn ? '<button class="btn ghost sm" data-act="sync-out">Sair</button>'
+          : `<button class="btn ghost sm" data-act="sync-mode">${up ? 'Já tenho conta' : 'Criar conta'}</button>`}
+      </div>`;
+    return;
+  }
+  const when = st.last ? st.last.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+  const label = st.status === 'syncing' ? 'Sincronizando…' : st.status === 'offline' ? 'Sem internet. Sincroniza quando a conexão voltar.' : st.status === 'error' ? '' : when ? `Sincronizado às ${when}` : 'Pronto';
+  box.innerHTML = `<h3>Sincronizar entre aparelhos</h3>
+    <p>Conectado como <b>${esc(st.email)}</b>. Seus documentos são trancados neste aparelho antes de subir.</p>
+    <p class="sync-ok">${label}</p>${note}
+    <div class="row-btns"><button class="btn primary sm" data-act="sync-now">Sincronizar agora</button><button class="btn ghost sm" data-act="sync-out">Sair deste aparelho</button></div>`;
+}
+// não redesenha enquanto a pessoa digita no bloco
+Sync.on(() => { if (!document.activeElement?.closest('#syncbox')) renderSync() });
+
+async function syncAction(act, btn){
+  const busy = t => { if (btn) { btn.disabled = true; btn.textContent = t } };
+  try {
+    if (act === 'sync-mode') { syncMode = syncMode === 'up' ? 'in' : 'up'; syncSent = false; return renderSync() }
+    if (act === 'sync-up' || act === 'sync-in') {
+      const st = Sync.state;
+      const e = st.signedIn ? st.email : $('#syncemail').value.trim();
+      const p = $('#syncpass').value, p2 = $('#syncpass2')?.value;
+      if (!/^\S+@\S+\.\S+$/.test(e)) return renderSync('Digite um e-mail válido.');
+      if (p.length < 8) return renderSync('A senha precisa ter pelo menos 8 caracteres.');
+      if (p2 !== undefined && p !== p2) return renderSync('As duas senhas não são iguais.');
+      syncEmail = e; store.set('carimbo.email', e);
+      if (st.signedIn) { busy('Abrindo…'); await Sync.unlock(p) }
+      else if (act === 'sync-up') {
+        busy('Criando…');
+        if (await Sync.signUp(e, p) === 'confirm') { syncSent = true; syncMode = 'in'; return renderSync() }
+      } else { busy('Entrando…'); await Sync.signIn(e, p) }
+      syncSent = false; toast('Sincronização ligada'); renderSync();
+    }
+    if (act === 'sync-now') { busy('Sincronizando…'); await Sync.syncNow(); renderSync() }
+    if (act === 'sync-out') {
+      if (!confirm('Sair da sincronização neste aparelho? Os documentos continuam aqui.')) return;
+      await Sync.signOut(); syncMode = 'in'; renderSync();
+    }
+  } catch (e) { renderSync(e.message || 'Algo deu errado. Tente de novo.') }
+}
+
 /* ---------- Backup ---------- */
 function openSettings(){
   const dlg = $('#form');
   dlg.innerHTML = `<div class="sheet settings">
     <div class="sheet-h"><h2>Backup e ajustes</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
     <div class="sheet-b">
-      <div class="group"><h3>Seus dados ficam só aqui</h3>
-        <p>Nada é enviado para a internet. Se você trocar ou perder o celular, só o backup recupera os documentos.</p>
+      <div class="group" id="syncbox"></div>
+      <div class="group"><h3>Neste aparelho</h3>
         <p class="meter" id="meter"></p></div>
       <div class="group"><h3>Fazer backup</h3>
         <p>Gera um arquivo com todos os documentos e viagens. Guarde em um lugar seguro, como seu e-mail ou nuvem pessoal.</p>
@@ -876,6 +952,7 @@ function openSettings(){
         <p>iPhone: no Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”. Android: no Chrome, toque no menu e em “Instalar app”. Depois disso abre sem internet.</p></div>
     </div></div>`;
   dlg.showModal();
+  renderSync();
   if (navigator.storage?.estimate) navigator.storage.estimate().then(e => {
     const mb = n => (n / 1048576).toFixed(1).replace('.', ',') + ' MB';
     const m = $('#meter'); if (m) m.textContent = `Usando ${mb(e.usage || 0)} de ${mb(e.quota || 0)} disponíveis`;
@@ -905,7 +982,7 @@ async function importAll(file){
       d.files = await Promise.all((d.files || []).map(async f => ({ name:f.name, type:f.type, blob: await (await fetch(f.data)).blob() })));
       await dbPut('docs', d);
     }
-    await load(); $('#form').close();
+    await load(); $('#form').close(); Sync.changed();
     toast(`${(data.docs || []).length} documentos restaurados`);
   } catch { toast('Este arquivo não é um backup do Carimbo') }
 }
@@ -914,7 +991,7 @@ async function importAll(file){
 let toastT, lastDeleted = null;
 async function deleteDoc(id){
   const d = state.docs.find(x => x.id === id); if (!d) return;
-  await dbDel('docs', id); state.docs = state.docs.filter(x => x.id !== id); lastDeleted = d;
+  await dbDel('docs', id); state.docs = state.docs.filter(x => x.id !== id); lastDeleted = d; Sync.deleted('docs', id);
   if ($('#form').open) $('#form').close();
   if ($('#viewer').open) closeViewer();
   render();
@@ -939,6 +1016,7 @@ document.addEventListener('click', async e => {
     case 'edit-trip': openTripForm(state.trips.find(t => t.id === id)); break;
     case 'settings': openSettings(); break;
     case 'export': exportAll(); break;
+    case 'sync-up': case 'sync-in': case 'sync-mode': case 'sync-now': case 'sync-out': syncAction(act, b); break;
     case 'close': { const d = b.closest('dialog'); if (d.id === 'viewer') closeViewer(); else { readToken++; d.close() } break }
     case 'open': {
       openViewer([id], 0, false); break;
@@ -961,12 +1039,12 @@ document.addEventListener('click', async e => {
     case 'del-doc': deleteDoc(id); break;
     case 'undo-del':
       if (!lastDeleted) return;
-      await dbPut('docs', lastDeleted); state.docs.push(lastDeleted); lastDeleted = null;
+      await dbPut('docs', lastDeleted); state.docs.push(lastDeleted); Sync.restored('docs', lastDeleted.id); lastDeleted = null;
       render(); toast('Documento restaurado'); break;
     case 'del-trip': {
       if (!confirm('Excluir esta viagem? Os documentos dela passam para Pessoais.')) return;
-      for (const d of state.docs.filter(d => d.tripId === id)) { d.tripId = ''; await dbPut('docs', d) }
-      await dbDel('trips', id); state.trips = state.trips.filter(t => t.id !== id);
+      for (const d of state.docs.filter(d => d.tripId === id)) { d.tripId = ''; d.updatedAt = Date.now(); await dbPut('docs', d) }
+      await dbDel('trips', id); Sync.deleted('trips', id); state.trips = state.trips.filter(t => t.id !== id);
       $('#form').close(); setFilter('all'); toast('Viagem excluída'); break;
     }
     case 'uncheck-del': {
@@ -1030,7 +1108,7 @@ async function load(){
   [state.docs, state.trips] = await Promise.all([dbAll('docs'), dbAll('trips')]);
   render();
 }
-load().catch(() => { $('#app').innerHTML = '<div class="empty"><h3>Armazenamento indisponível</h3><p>Abra o Carimbo fora da janela anônima para guardar documentos neste aparelho.</p></div>' });
+load().then(() => Sync.init()).catch(() => { $('#app').innerHTML = '<div class="empty"><h3>Armazenamento indisponível</h3><p>Abra o Carimbo fora da janela anônima para guardar documentos neste aparelho.</p></div>' });
 if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   const hadSW = !!navigator.serviceWorker.controller;
