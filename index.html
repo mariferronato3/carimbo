@@ -234,7 +234,8 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .slides::-webkit-scrollbar{display:none}
 .slide{flex:0 0 100%;scroll-snap-align:center;border-radius:18px;background:var(--sunk);overflow:hidden;display:grid;place-items:center;min-height:240px;max-height:58dvh}
 .slide img{width:100%;height:100%;max-height:58dvh;object-fit:contain;display:block;background:#fff}
-.slide iframe{width:100%;height:58dvh;border:0;background:#fff}
+.slide.pdfpage{display:block;background:#fff;min-height:0;max-height:none}
+.slide.pdfpage img{width:100%;height:auto;max-height:none;object-fit:contain}
 .slide.nofile{color:var(--ink-3);padding:30px;text-align:center}
 .dots{display:flex;justify-content:center;gap:6px;margin:10px 0 0}
 .dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
@@ -259,6 +260,14 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translate(-50%,20px);background:var(--ink);color:var(--paper);padding:12px 18px;border-radius:999px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
 .doc-wrap{position:relative}
+.boxes{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;margin-top:12px}
+.tag.day{background:color-mix(in srgb,var(--tc) 14%,var(--card));color:var(--ink)}
+.box{background:var(--sunk);border-radius:10px;padding:6px 10px;min-width:0}
+.box.wide{grid-column:1/-1}
+.box small{display:block;font-size:12px;font-weight:600;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.box b{display:block;font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc.plain .boxes{margin-bottom:0}
+.fact a{color:var(--stamp)}
 .doc-wrap .doc-main{padding-right:34px}
 .doc-del{position:absolute;top:10px;right:8px;width:44px;height:44px;border-radius:50%;border:0;background:transparent;color:var(--ink-3);display:grid;place-items:center}
 .doc-del svg{width:19px;height:19px}
@@ -331,16 +340,16 @@ const TYPE_ICONS = {
 const typeIcon = k => `<svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TYPE_ICONS[k] || TYPE_ICONS.other}</svg>`;
 // Campos de cada categoria. 'big' aparece em destaque. number/expires ficam no documento; o resto em d.x
 const FIELDS = {
-  passport:  [['number', 'Número', 'big'], ['issued', 'Emissão', 'date'], ['expires', 'Validade', 'date']],
-  visa:      [['place', 'Local', 'wide'], ['number', 'Número', 'big'], ['expires', 'Validade', 'date']],
-  id:        [['number', 'Número', 'big'], ['expires', 'Validade', 'date']],
-  ticket:    [['route', 'Trecho', 'wide'], ['number', 'Localizador', 'big'], ['flight', 'Voo'], ['seat', 'Poltrona'], ['group', 'Grupo'], ['gate', 'Portão'], ['boarding', 'Embarque', 'datetime'], ['departure', 'Decolagem', 'datetime']],
-  stay:      [['number', 'Localizador', 'big'], ['hotel', 'Hotel', 'wide'], ['address', 'Endereço', 'wide'], ['checkin', 'Check-in', 'date'], ['checkout', 'Check-out', 'date']],
-  tour:      [['name', 'Nome', 'wide'], ['what', 'O que é'], ['number', 'Localizador', 'big'], ['date', 'Data', 'date'], ['time', 'Horário', 'time']],
-  insurance: [['number', 'Número da apólice', 'big'], ['value', 'Valor da apólice'], ['expires', 'Válido até', 'date']],
-  health:    [['what', 'O que é', 'wide'], ['date', 'Data', 'date'], ['number', 'Número', 'big']],
-  money:     [['place', 'Local', 'wide'], ['date', 'Data', 'date'], ['value', 'Valor', 'big']],
-  other:     [['number', 'Número', 'big'], ['expires', 'Validade', 'date']],
+  passport:  [['number', 'Número', 'big'], ['issued', 'Emissão', 'date', 1], ['expires', 'Validade', 'date', 1]],
+  visa:      [['place', 'Local', 'wide', 1], ['number', 'Número', 'big'], ['expires', 'Validade', 'date', 1]],
+  id:        [['number', 'Número', 'big'], ['expires', 'Validade', 'date', 1]],
+  ticket:    [['route', 'Trecho', 'wide'], ['number', 'Localizador', 'big'], ['flight', 'Voo', '', 1], ['seat', 'Poltrona', '', 1], ['gate', 'Portão', '', 1], ['terminal', 'Terminal', '', 1], ['group', 'Grupo', '', 1], ['boarding', 'Embarque', 'datetime', 1], ['departure', 'Decolagem', 'datetime', 1], ['arrival', 'Chegada', 'datetime', 1], ['class', 'Classe'], ['baggage', 'Bagagem despachada'], ['eticket', 'Nº do bilhete', 'wide']],
+  stay:      [['number', 'Localizador', 'big'], ['hotel', 'Hotel', 'wide'], ['address', 'Endereço', 'wide'], ['checkin', 'Check-in', 'date', 1], ['checkout', 'Check-out', 'date', 1], ['checkinTime', 'Entrada', 'time', 1], ['checkoutTime', 'Saída', 'time', 1], ['nights', 'Noites', '', 1], ['total', 'Valor total'], ['phone', 'Telefone', 'tel']],
+  tour:      [['name', 'Nome', 'wide'], ['number', 'Localizador', 'big'], ['what', 'O que é', '', 1], ['date', 'Data', 'date', 1], ['time', 'Horário', 'time', 1], ['meeting', 'Ponto de encontro', 'wide']],
+  insurance: [['number', 'Número da apólice', 'big'], ['value', 'Valor da apólice', '', 1], ['expires', 'Válido até', 'date', 1], ['phone', 'Telefone de emergência', 'tel']],
+  health:    [['what', 'O que é', 'wide'], ['number', 'Número', 'big'], ['date', 'Data', 'date', 1]],
+  money:     [['value', 'Valor', 'big'], ['place', 'Local', 'wide', 1], ['date', 'Data', 'date', 1]],
+  other:     [['number', 'Número', 'big'], ['expires', 'Validade', 'date', 1]],
 };
 const CORE = new Set(['number', 'expires']);
 const fieldsOf = t => FIELDS[t] || FIELDS.other;
@@ -395,6 +404,7 @@ const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d };
 const toDate = s => new Date(s + 'T00:00');
 const days = s => Math.round((toDate(s) - today()) / 864e5);
 const fmt = (s, y = true) => s ? toDate(s).toLocaleDateString('pt-BR', { day:'numeric', month:'short', ...(y ? { year:'numeric' } : {}) }).replace('.', '') : '';
+const fshort = (kind, v) => !v ? '' : kind === 'date' ? fmt(v, false) : kind === 'datetime' ? (v.slice(0, 10) === (window.__day || '') ? v.slice(11, 16) : `${fmt(v.slice(0, 10), false)}, ${v.slice(11, 16)}`) : v;
 const fshow = (kind, v) => !v ? '' : kind === 'date' ? fmt(v) : kind === 'datetime' ? `${fmt(v.slice(0, 10))}, ${v.slice(11, 16)}` : v;
 
 function status(d){
@@ -451,6 +461,18 @@ function summary(d){
     default: return [];
   }
 }
+// Data do voo, quando o cartão mostra só os horários
+const flightDay = d => { const t = d.type === 'ticket' && (d.x?.departure || d.x?.boarding); return t ? toDate(t.slice(0, 10)).toLocaleDateString('pt-BR', { weekday:'short', day:'numeric', month:'short', year:'numeric' }).replace(/\./g, '') : '' };
+function boxes(d){
+  const st = status(d);
+  const list = fieldsOf(d.type).filter(f => f[3] && fval(d, f[0]) && !(f[0] === 'expires' && st && st.k !== 'ok'));
+  // embarque/decolagem/chegada no mesmo dia: mostra só a hora
+  const days = new Set(list.filter(f => f[2] === 'datetime').map(f => fval(d, f[0]).slice(0, 10)));
+  window.__day = days.size === 1 ? [...days][0] : '';
+  const html = list.map(([k, l, kind]) => `<span class="box${kind === 'wide' ? ' wide' : ''}"><small>${l}</small><b>${esc(fshort(kind, fval(d, k)))}</b></span>`).join('');
+  window.__day = '';
+  return html ? `<span class="boxes">${html}</span>` : '';
+}
 function docCard(d){
   const t = TYPES[d.type] || TYPES.other, st = status(d), bf = bigField(d), bv = bf && fval(d, bf[0]);
   const trip = d.tripId && state.trips.find(x => x.id === d.tripId);
@@ -459,8 +481,9 @@ function docCard(d){
     <span class="doc-main">
       <span class="doc-title">${esc(d.title)}</span>
       ${bv ? `<span class="doc-num">${esc(bv)}</span>` : ''}
-      <span class="tags">${st ? `<span class="tag ${st.k}">${st.t}</span>` : ''}${summary(d).filter(Boolean).map(v => `<span class="tag">${esc(v)}</span>`).join('')}${state.filter === 'all' && trip ? `<span class="tag">${esc(trip.name)}</span>` : ''}${(d.files||[]).length > 1 ? `<span class="tag">${d.files.length} arquivos</span>` : ''}</span>
+      <span class="tags">${st && st.k !== 'ok' ? `<span class="tag ${st.k}">${st.t}</span>` : ''}${flightDay(d) ? `<span class="tag day">${flightDay(d)}</span>` : ''}${state.filter === 'all' && trip ? `<span class="tag">${esc(trip.name)}</span>` : ''}${(d.files||[]).length > 1 ? `<span class="tag">${d.files.length} arquivos</span>` : ''}</span>
     </span>
+    ${boxes(d)}
     ${d.number ? `<span class="mrz" aria-hidden="true">${esc(mrz(d))}</span>` : ''}
   </button><button class="doc-del" data-act="del-doc" data-id="${d.id}" aria-label="Excluir ${esc(d.title)}">${ICON.trash}</button></div>`;
 }
@@ -597,9 +620,10 @@ function fieldsHTML(type, d, auto = new Set()){
     const input = kind === 'date' ? `<input class="inp${a}" type="date" name="${name}" value="${esc(v)}">`
       : kind === 'datetime' ? `<input class="inp${a}" type="datetime-local" name="${name}" value="${esc(v)}">`
       : kind === 'time' ? `<input class="inp${a}" type="time" name="${name}" value="${esc(v)}">`
+      : kind === 'tel' ? `<input class="inp${a}" type="tel" name="${name}" value="${esc(v)}">`
       : k === 'address' ? `<textarea class="inp${a}" name="${name}" rows="2">${esc(v)}</textarea>`
       : `<input class="inp${kind === 'big' ? ' mono' : ''}${a}" name="${name}" value="${esc(v)}" autocomplete="off"${kind === 'big' ? ' autocapitalize="characters" spellcheck="false"' : ''}>`;
-    return `<label class="field${kind === 'big' || kind === 'wide' ? ' wide' : ''}"><span>${l}</span>${input}</label>`;
+    return `<label class="field${kind === 'big' || kind === 'wide' || kind === 'tel' ? ' wide' : ''}"><span>${l}</span>${input}</label>`;
   }).join('')}</div>`;
 }
 function collect(form){
@@ -638,6 +662,9 @@ function openDocForm(doc, pre){
     <div class="sheet-h"><h2>${doc ? 'Editar documento' : 'Novo documento'}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
     <div class="sheet-b">
       ${banner}
+      <fieldset class="field" style="border:0;padding:0;margin-inline:0"><legend style="font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Tipo</legend>
+        <div class="types">${ORDER.map(k => `<label style="--tc:${TYPES[k].col}"><input type="radio" name="type" value="${k}" ${d.type === k ? 'checked' : ''}><span>${typeIcon(k)}${TYPES[k].l}</span></label>`).join('')}</div>
+      </fieldset>
       <label class="field"><span>Nome do documento</span><input class="inp${auto.has('title') ? ' auto' : ''}" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
       <div id="fieldbox">${fieldsHTML(d.type, d, auto)}</div>
       ${pre?.mrz && pre.numberOk === false ? '<small class="hint">Confira o número: a foto pode ter atrapalhado a leitura.</small>' : ''}
@@ -652,9 +679,6 @@ function openDocForm(doc, pre){
         <div class="files" id="files"></div>
         <small id="pickstatus" role="status"></small>
       </div>
-      <fieldset class="field" style="border:0;padding:0;margin-inline:0"><legend style="font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Tipo</legend>
-        <div class="types">${ORDER.map(k => `<label style="--tc:${TYPES[k].col}"><input type="radio" name="type" value="${k}" ${d.type === k ? 'checked' : ''}><span>${typeIcon(k)}${TYPES[k].l}</span></label>`).join('')}</div>
-      </fieldset>
       <label class="switch"><input type="checkbox" name="pinned" ${d.pinned ? 'checked' : ''}>Mostrar em “À mão”, no topo da tela inicial</label>
       ${doc ? `<div class="row-btns"><button type="button" class="btn danger sm" data-act="del-doc" data-id="${d.id}">Excluir documento</button></div>` : ''}
     </div>
@@ -783,6 +807,7 @@ function openViewer(ids, i = 0, present = false){
   const v = $('#viewer'); if (!v.open) v.showModal();
   if (present && 'wakeLock' in navigator) navigator.wakeLock.request('screen').then(w => wake = w).catch(() => {});
 }
+const pdfImgs = new WeakMap();
 function closeViewer(){ $('#viewer').close(); }
 $('#viewer').addEventListener('close', () => { if (wake) { wake.release().catch(() => {}); wake = null } $('#viewer').innerHTML = '' });
 
@@ -796,13 +821,13 @@ function drawViewer(){
       ${bv ? `<div class="info top"><div class="big-num"><div><small>${bf[1]}</small><strong>${esc(bv)}</strong></div><button class="icon-btn" data-act="copy" data-v="${esc(bv)}" aria-label="Copiar ${bf[1].toLowerCase()}">${ICON.copy}</button></div></div>` : ''}
       <div class="slides" id="slides">${files.length ? files.map(f => f.type.startsWith('image/')
         ? `<div class="slide"><img src="${blobUrl(f.blob)}" alt="${esc(d.title)}"></div>`
-        : `<div class="slide"><iframe src="${blobUrl(f.blob)}" title="${esc(f.name)}"></iframe></div>`).join('')
+        : `<a class="slide pdfpage" href="${blobUrl(f.blob)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(f.name)} completo"><img data-pdf="${files.indexOf(f)}" alt="Primeira página de ${esc(d.title)}"></a>`).join('')
         : `<div class="slide nofile">Sem arquivo anexado. Toque em Editar para adicionar uma foto ou PDF.</div>`}</div>
       ${files.length > 1 ? `<div class="dots" id="dots">${files.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
       <div class="info">
-        ${files.some(f => !f.type.startsWith('image/')) ? `<div class="row-btns" style="margin-top:6px">${files.filter(f => !f.type.startsWith('image/')).map(f => `<a class="btn ghost sm" href="${blobUrl(f.blob)}" target="_blank" rel="noopener" download="${esc(f.name)}">Abrir ${esc(f.name)}</a>`).join('')}</div>` : ''}
+        ${files.some(f => !f.type.startsWith('image/')) ? `<div class="row-btns" style="margin-top:6px">${files.filter(f => !f.type.startsWith('image/')).map(f => `<a class="btn ghost sm" href="${blobUrl(f.blob)}" target="_blank" rel="noopener" download="${esc(f.name)}">Abrir o PDF completo</a>`).join('')}</div>` : ''}
         <div class="facts">
-          ${fieldsOf(d.type).filter(f => f !== bf && fval(d, f[0])).map(([k, l, kind]) => `<div class="fact${kind === 'wide' ? ' wide' : ''}${k === 'expires' && st ? ' ' + st.k : ''}"><small>${l}</small><b>${esc(fshow(kind, fval(d, k)))}</b></div>`).join('')}
+          ${fieldsOf(d.type).filter(f => f !== bf && fval(d, f[0])).map(([k, l, kind]) => `<div class="fact${kind === 'wide' || kind === 'tel' ? ' wide' : ''}${k === 'expires' && st ? ' ' + st.k : ''}"><small>${l}</small><b>${kind === 'tel' ? `<a href="tel:${esc(fval(d, k).replace(/[^\d+]/g, ''))}">${esc(fval(d, k))}</a>` : esc(fshow(kind, fval(d, k)))}</b></div>`).join('')}
           ${st && st.k !== 'ok' ? `<div class="fact ${st.k}"><small>Situação</small><b>${st.t}</b></div>` : ''}
           ${d.holder ? `<div class="fact"><small>Titular</small><b>${esc(d.holder)}</b></div>` : ''}
           ${trip ? `<div class="fact"><small>Viagem</small><b>${esc(trip.name)}</b></div>` : ''}
@@ -813,6 +838,12 @@ function drawViewer(){
     </div>
     ${seq.length > 1 ? `<div class="v-f"><button class="btn ghost sm" data-act="prev" ${pos ? '' : 'disabled'} aria-label="Documento anterior">‹ Anterior</button><span class="count">${pos + 1} de ${seq.length}</span><button class="btn ghost sm" data-act="nextdoc" ${pos < seq.length - 1 ? '' : 'disabled'} aria-label="Próximo documento">Próximo ›</button></div>` : ''}
   </div>`;
+  // PDF: mostra só a 1ª página, como imagem limpa (sem a barra do leitor de PDF)
+  $('#viewer').querySelectorAll('img[data-pdf]').forEach(async img => {
+    const f = files[+img.dataset.pdf];
+    if (!pdfImgs.has(f.blob)) pdfImgs.set(f.blob, Extract.pdfThumb(f.blob, 1400).then(b => URL.createObjectURL(b)));
+    try { img.src = await pdfImgs.get(f.blob) } catch { img.closest('.slide').classList.add('nofile'); img.replaceWith('Não consegui mostrar este PDF. Toque em Abrir abaixo.') }
+  });
   // Ações e links do arquivo vão para o fim, depois da imagem do documento
   const vb = $('#viewer .v-body'), end = document.createElement('div');
   end.className = 'info end'; vb.querySelectorAll('.info:not(.top) > .row-btns').forEach(r => end.append(r)); vb.append(end); vb.scrollTop = 0;
