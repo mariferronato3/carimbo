@@ -58,6 +58,10 @@ button{cursor:pointer}
 .top-row .icon-btn{margin-left:auto}
 .icon-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);display:grid;place-items:center}
 .icon-btn svg{width:20px;height:20px}
+.who{display:inline-flex;gap:4px;margin-top:14px;padding:4px;border-radius:999px;background:var(--sunk)}
+.who-b{border:0;background:transparent;height:36px;padding:0 16px;border-radius:999px;font-weight:600;font-size:15px;color:var(--ink-2)}
+.who-b[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(14,31,58,.18)}
+.tag.who-t{background:var(--ink);color:var(--paper)}
 .syncline{display:block;background:none;border:0;padding:6px 0 0;margin:0;font-size:14px;font-weight:600;color:var(--stamp);text-align:left}
 .syncline.err{color:var(--bad)}
 .next{margin:14px 0 0;font-size:15px;color:var(--ink-2)}
@@ -302,6 +306,7 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5H7z"/><path d="M10 13.5l2-2 2 2M12 11.5V16"/></svg>
       </button>
     </div>
+    <div class="who" id="who" role="group" aria-label="De quem são os documentos"></div>
     <p class="next" id="next"></p>
     <button class="syncline" id="syncline" data-act="settings"></button>
   </div>
@@ -414,7 +419,19 @@ window.CarimboStore = {
   getFlag: () => store.get('carimbo.sync') === '1', setFlag: on => store.set('carimbo.sync', on ? '1' : ''),
 };
 
-const state = { docs:[], trips:[], filter: store.get('carimbo.filter') || 'all' };
+const state = { docs:[], trips:[], filter: store.get('carimbo.filter') || 'all', person: store.get('carimbo.person') || 'all' };
+// Pessoas que usam este Carimbo. 'match' = nomes que aparecem nos documentos dela.
+const PEOPLE = [
+  { id: 'mari', name: 'Mari', match: ['mariana', 'mari'] },
+  { id: 'nati', name: 'Nati', match: ['natalia', 'nati'] },
+];
+const plainName = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const personOf = holder => { const w = plainName(holder).split(/[^a-z]+/); return PEOPLE.find(p => p.match.some(m => w.includes(m)))?.id || '' };
+// 'both' = documento das duas (reserva de hotel, tour...)
+const OWNERS = [...PEOPLE, { id: 'both', name: 'As duas' }];
+const personName = id => OWNERS.find(p => p.id === id)?.name || '';
+// documentos da pessoa escolhida no topo
+const vis = () => state.person === 'all' ? state.docs : state.docs.filter(d => (d.person || 'mari') === state.person || d.person === 'both');
 
 /* ---------- Utilidades de data ---------- */
 const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d };
@@ -468,7 +485,12 @@ function renderSyncLine(){
     : st.last ? `Sincronizado às ${st.last.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}` : 'Sincronização ligada';
   el.classList.toggle('err', st.status === 'error');
 }
+function renderWho(){
+  const el = $('#who'); if (!el) return;
+  el.innerHTML = [...PEOPLE, { id: 'all', name: 'Todas' }].map(p => `<button class="who-b" aria-pressed="${state.person === p.id}" data-act="person" data-id="${p.id}">${p.name}</button>`).join('');
+}
 function renderNext(){
+  renderWho();
   renderSyncLine();
   const now = today();
   const active = state.trips.find(t => t.start && toDate(t.start) <= now && (!t.end || toDate(t.end) >= now));
@@ -508,7 +530,7 @@ function boxes(d){
 function docCard(d){
   const t = TYPES[d.type] || TYPES.other, st = status(d), bf = bigField(d), bv = bf && fval(d, bf[0]);
   const trip = d.tripId && state.trips.find(x => x.id === d.tripId);
-  const tags = [st && st.k !== 'ok' && `<span class="tag ${st.k}">${st.t}</span>`, state.filter === 'all' && trip && `<span class="tag">${esc(trip.name)}</span>`, (d.files || []).length > 1 && `<span class="tag">${d.files.length} arquivos</span>`].filter(Boolean).join('');
+  const tags = [state.person === 'all' && personName(d.person || 'mari') && `<span class="tag who-t">${personName(d.person || 'mari')}</span>`, st && st.k !== 'ok' && `<span class="tag ${st.k}">${st.t}</span>`, state.filter === 'all' && trip && `<span class="tag">${esc(trip.name)}</span>`, (d.files || []).length > 1 && `<span class="tag">${d.files.length} arquivos</span>`].filter(Boolean).join('');
   return `<div class="doc-wrap"><button class="doc" style="--tc:${t.col}" data-act="open" data-id="${d.id}">
     <span class="doc-head">
       <span class="doc-title">${esc(d.title)}</span>
@@ -526,22 +548,22 @@ function render(){
   const trip = state.trips.find(t => t.id === f);
   if (f !== 'all' && f !== 'personal' && !trip) { state.filter = 'all'; return render(); }
 
-  let docs = state.docs.slice().sort(sortDocs);
+  let docs = vis().slice().sort(sortDocs);
   if (f === 'personal') docs = docs.filter(d => !d.tripId);
   else if (trip) docs = docs.filter(d => d.tripId === trip.id);
 
   const chip = (id, label, n) => `<button class="chip" aria-pressed="${f === id}" data-act="filter" data-id="${id}">${esc(label)}${n != null ? `<small>${n}</small>` : ''}</button>`;
   let h = `<nav class="chips" aria-label="Filtrar documentos">
-    ${chip('all', 'Tudo', state.docs.length)}
-    ${chip('personal', 'Meus documentos', state.docs.filter(d => !d.tripId).length)}
-    ${tripsSorted().map(t => chip(t.id, t.name, state.docs.filter(d => d.tripId === t.id).length)).join('')}
+    ${chip('all', 'Tudo', vis().length)}
+    ${chip('personal', 'Meus documentos', vis().filter(d => !d.tripId).length)}
+    ${tripsSorted().map(t => chip(t.id, t.name, vis().filter(d => d.tripId === t.id).length)).join('')}
     <button class="chip add" data-act="new-trip">+ Nova viagem</button>
   </nav>`;
 
   if (trip) h += tripPanel(trip, docs);
 
   if (f === 'all') {
-    const issues = state.docs.map(d => [d, status(d)]).filter(([, s]) => s && s.k !== 'ok');
+    const issues = vis().map(d => [d, status(d)]).filter(([, s]) => s && s.k !== 'ok');
     if (issues.length) {
       const bad = issues.some(([, s]) => s.k === 'bad');
       h += `<div class="alert ${bad ? 'bad' : ''}" role="alert"><strong>${issues.length === 1 ? '1 documento precisa' : `${issues.length} documentos precisam`} de atenção</strong>
@@ -733,6 +755,7 @@ function openDocForm(doc, pre){
       <label class="field"><span>Nome</span><input class="inp${auto.has('title') ? ' auto' : ''}" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
       <div id="fieldbox">${fieldsHTML(d.type, d, auto)}</div>
       ${pre?.mrz && pre.numberOk === false ? '<small class="hint">Confira o número: a foto pode ter atrapalhado a leitura.</small>' : ''}
+      <label class="field"><span>De quem é</span><select class="inp" name="person">${OWNERS.map(p => `<option value="${p.id}" ${(d.person || personOf(d.holder) || (['stay', 'tour'].includes(d.type) ? 'both' : state.person !== 'all' ? state.person : 'mari')) === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>
       <label class="field"><span>Titular</span><input class="inp${auto.has('holder') ? ' auto' : ''}" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
       <label class="field"><span>Viagem</span><select class="inp${matched ? ' auto' : ''}" name="tripId"><option value="">Pessoal (todas as viagens)</option>${tripsSorted().map(t => `<option value="${t.id}" ${d.tripId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
       <label class="field"><span>Observações</span><textarea class="inp${auto.has('notes') ? ' auto' : ''}" name="notes" placeholder="Ex.: original fica na pasta azul">${esc(d.notes)}</textarea></label>
@@ -820,6 +843,7 @@ async function saveDoc(form){
     tripId: fd.get('tripId') || '',
     notes: fd.get('notes').trim(),
     pinned: fd.get('pinned') === 'on',
+    person: fd.get('person') || 'mari',
     files: draftFiles,
     text: draftText || old?.text || '',
     updatedAt: Date.now(),
@@ -897,6 +921,7 @@ function drawViewer(){
         <div class="facts">
           ${fieldsOf(d.type).filter(f => f !== bf && fval(d, f[0])).map(([k, l, kind]) => `<div class="fact${kind === 'wide' || kind === 'tel' ? ' wide' : ''}${k === 'expires' && st ? ' ' + st.k : ''}"><small>${l}</small><b>${kind === 'tel' ? `<a href="tel:${esc(fval(d, k).replace(/[^\d+]/g, ''))}">${esc(fval(d, k))}</a>` : esc(fshow(kind, fval(d, k)))}</b></div>`).join('')}
           ${st && st.k !== 'ok' ? `<div class="fact ${st.k}"><small>Situação</small><b>${st.t}</b></div>` : ''}
+          ${personName(d.person || 'mari') ? `<div class="fact"><small>De quem é</small><b>${personName(d.person || 'mari')}</b></div>` : ''}
           ${d.holder ? `<div class="fact"><small>Titular</small><b>${esc(d.holder)}</b></div>` : ''}
           ${trip ? `<div class="fact"><small>Viagem</small><b>${esc(trip.name)}</b></div>` : ''}
           ${d.notes ? `<div class="fact wide"><small>Observações</small><b class="notes">${esc(d.notes)}</b></div>` : ''}
@@ -1061,6 +1086,7 @@ document.addEventListener('click', async e => {
   if (act === 'check') return; // tratado no change
   switch (act) {
     case 'filter': setFilter(id); break;
+    case 'person': state.person = id; store.set('carimbo.person', id); render(); window.scrollTo({ top: 0 }); break;
     case 'new-doc': addDoc(); break;
     case 'kind-blank': openDocForm(null); break;
     case 'skip-read': readToken++; skipExisting ? openDocForm(skipExisting) : openDocForm(null, { type: 'other', files: skipFiles, filled: [], x: {}, skipped: true }); break;
@@ -1074,7 +1100,7 @@ document.addEventListener('click', async e => {
       openViewer([id], 0, false); break;
     }
     case 'present': {
-      const ids = (id === 'pinned' ? state.docs.filter(d => d.pinned) : state.docs.filter(d => d.tripId === id || (!d.tripId && d.pinned))).sort(sortDocs).map(d => d.id);
+      const ids = (id === 'pinned' ? vis().filter(d => d.pinned) : vis().filter(d => d.tripId === id || (!d.tripId && d.pinned))).sort(sortDocs).map(d => d.id);
       if (!ids.length) return toast('Adicione documentos primeiro');
       openViewer(ids, 0, true); break;
     }
@@ -1158,6 +1184,7 @@ document.addEventListener('keydown', e => {
 /* ---------- Início ---------- */
 async function load(){
   [state.docs, state.trips] = await Promise.all([dbAll('docs'), dbAll('trips')]);
+  for (const d of state.docs) if (!d.person) { d.person = personOf(d.holder) || 'mari'; d.updatedAt = Date.now(); await dbPut('docs', d) }
   render();
 }
 load().then(() => { Sync.init(); autoTripsForOld().catch(() => {}) }).catch(() => { $('#app').innerHTML = '<div class="empty"><h3>Armazenamento indisponível</h3><p>Abra o Carimbo fora da janela anônima para guardar documentos neste aparelho.</p></div>' });
