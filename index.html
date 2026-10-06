@@ -417,7 +417,9 @@ const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d };
 const toDate = s => new Date(s + 'T00:00');
 const days = s => Math.round((toDate(s) - today()) / 864e5);
 const fmt = (s, y = true) => s ? toDate(s).toLocaleDateString('pt-BR', { day:'numeric', month:'short', ...(y ? { year:'numeric' } : {}) }).replace('.', '') : '';
-const fshort = (kind, v) => !v ? '' : kind === 'date' ? fmt(v, false) : kind === 'datetime' ? (v.slice(0, 10) === (window.__day || '') ? v.slice(11, 16) : `${fmt(v.slice(0, 10), false)}, ${v.slice(11, 16)}`) : v;
+// ano aparece quando não é o ano atual (validade de passaporte precisa do ano)
+const thisYear = v => v.slice(0, 4) === String(new Date().getFullYear());
+const fshort = (kind, v) => !v ? '' : kind === 'date' ? fmt(v, !thisYear(v)) : kind === 'datetime' ? (v.slice(0, 10) === (window.__day || '') ? v.slice(11, 16) : `${fmt(v.slice(0, 10), !thisYear(v))}, ${v.slice(11, 16)}`) : v;
 const fshow = (kind, v) => !v ? '' : kind === 'date' ? fmt(v) : kind === 'datetime' ? `${fmt(v.slice(0, 10))}, ${v.slice(11, 16)}` : v;
 
 function status(d){

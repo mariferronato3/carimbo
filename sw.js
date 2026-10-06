@@ -1,4 +1,4 @@
-const V = 'carimbo-v15';
+const V = 'carimbo-v16';
 const SHELL = ['./', './index.html', './extract.js', './sync.js', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-512.png'];
 // Leitor de documentos: grande, então é guardado sem travar a instalação
 const VENDOR = ['tesseract.min.js', 'worker.min.js', 'tesseract-core-lstm.wasm.js', 'tesseract-core-simd-lstm.wasm.js',
