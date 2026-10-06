@@ -589,7 +589,9 @@ async function readNewDoc(fileList, existing){
   skipFiles = files; skipExisting = existing || null;
   let res;
   try {
-    res = await Extract.read(files, existing && existing.type !== 'other' ? existing.type : '', msg => { const s = $('#readstatus'); if (s && token === readToken) s.textContent = msg });
+    // documento vazio (ou genérico): descobre o tipo de novo; se já tem dados, mantém o tipo
+    const keepType = existing && existing.type !== 'other' && (existing.number || Object.values(existing.x || {}).some(Boolean));
+    res = await Extract.read(files, keepType ? existing.type : '', msg => { const s = $('#readstatus'); if (s && token === readToken) s.textContent = msg });
   } catch (e) { res = { type: existing?.type || 'other', filled: [], x: {}, failed: true } }
   if (token !== readToken) return;
   if (existing) {
@@ -598,7 +600,7 @@ async function readNewDoc(fileList, existing){
     const keep = Object.fromEntries(['title', 'number', 'holder', 'expires', 'notes'].map(k => [k, has(k, existing[k]) ? existing[k] : res[k]]));
     const x = { ...res.x }; for (const [k, v] of Object.entries(existing.x || {})) if (v) x[k] = v;
     const filled = res.filled.filter(k => k.startsWith('x.') ? x[k.slice(2)] === res.x[k.slice(2)] : keep[k] === res[k]);
-    return openDocForm({ ...existing, ...keep, x }, { ...res, filled, detected: false });
+    return openDocForm({ ...existing, ...keep, x, type: res.type }, { ...res, filled, detected: res.type !== existing.type });
   }
   openDocForm(null, { ...res, files });
 }
