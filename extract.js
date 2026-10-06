@@ -230,6 +230,30 @@ const AIRLINES = ['LATAM', 'GOL', 'Azul', 'TAP Air Portugal', 'TAP', 'Air France
 const STAYS = ['Booking.com', 'Airbnb', 'Expedia', 'Hotels.com', 'Decolar', 'Agoda', 'Accor', 'Marriott', 'Hilton', 'IHG', 'Ibis', 'Novotel', 'Meliá', 'NH Hotels', 'Hostelworld', 'Vrbo'];
 const INSURERS = ['Assist Card', 'Affinity', 'GTA', 'Travel Ace', 'Allianz', 'Porto Seguro', 'Intermac', 'Vital Card', 'April', 'Universal Assistance', 'Coris', 'SulAmérica', 'Mapfre', 'AXA', 'Seguros Promo', 'Real Seguro', 'Mondial', 'Bradesco Seguros', 'Itaú Seguros', 'Chubb', 'Zurich', 'Europ Assistance'];
 const BANKS = ['Nubank', 'Itaú', 'Bradesco', 'Santander', 'Banco do Brasil', 'Caixa', 'Inter', 'C6 Bank', 'BTG', 'XP', 'Sicredi', 'Sicoob', 'Wise', 'Revolut', 'Nomad', 'Banco Safra', 'PicPay', 'Mercado Pago'];
+const TOURS = ['GetYourGuide', 'Get Your Guide', 'Viator', 'Civitatis', 'Klook', 'Tiqets', 'Musement', 'Headout', 'Fever', 'Tripadvisor', 'Airbnb Experiences', 'Guruwalk', 'Freetour', 'Sandemans'];
+
+// Descobre que tipo de documento é, pela faixa MRZ e por palavras típicas
+const CLUES = {
+  passport:  [[/passaporte|passport|pasaporte/i, 3]],
+  visa:      [[/\bvisto\b|\bvisa\b(?!\s*(card|cart[ãa]o|electron|infinite|platinum|gold|signature))|schengen|consulado|consulate/i, 3]],
+  id:        [[/carteira\s+de\s+identidade|registro\s+geral|habilita[çc][ãa]o|\bCNH\b|\bRG\b|identity\s+card/i, 4]],
+  ticket:    [[/cart[ãa]o\s+de\s+embarque|boarding\s+pass|e-?ticket|bilhete\s+eletr[ôo]nico/i, 5], [/\bvoo\b|flight|aeroporto|airport|airlines?|companhia\s+a[ée]rea/i, 2], [/port[ãa]o|\bgate\b|assento|poltrona|\bseat\b|bagagem|baggage/i, 1], [/\([A-Z]{3}\)/, 1]],
+  stay:      [[/check-?in|check-?out/i, 3], [/hotel|pousada|hostel|hospedagem|accommodation|acomoda[çc][ãa]o|booking\.com|airbnb|h[óo]spede|\bguest\b|noites|nights|quarto|room/i, 2]],
+  tour:      [[/getyourguide|get your guide|viator|civitatis|klook|tiqets|musement|headout|guruwalk|sandemans/i, 6], [/\btour\b|passeio|excurs[ãa]o|excursion|ingresso|admission|ponto\s+de\s+encontro|meeting\s+point|atividade|activity|experi[êe]ncia/i, 2]],
+  insurance: [[/seguro\s+viagem|travel\s+insurance|ap[óo]lice|policy\s+number|assist[êe]ncia\s+(?:em\s+)?viagem|assist\s+card|affinity|travel\s+ace/i, 5], [/seguro|insurance|cobertura|coverage|segurado|insured/i, 2]],
+  health:    [[/vacina|vacina[çc][ãa]o|vaccin|imuniza[çc][ãa]o|febre\s+amarela|yellow\s+fever|certificado\s+internacional/i, 5], [/exame|laudo|m[ée]dic[oa]|receita|sa[úu]de|health/i, 1]],
+  money:     [[/extrato|statement|saldo|holerite|contracheque|imposto\s+de\s+renda|comprovante\s+de\s+(?:pagamento|transfer[êe]ncia|renda)|\bpix\b|transfer[êe]ncia|ag[êe]ncia\s+\d|conta\s+corrente/i, 4], [/R\$|banco|bank|pagamento|payment|valor/i, 1]],
+};
+function classify(text, mrz){
+  if (mrz) return mrz.kind === 'V' ? 'visa' : mrz.kind === 'I' ? 'id' : 'passport';
+  let best = 'other', top = 1;
+  for (const [type, rules] of Object.entries(CLUES)) {
+    const score = rules.reduce((n, [re, w]) => n + (re.test(text) ? w : 0), 0);
+    if (score > top) { best = type; top = score }
+  }
+  return best;
+}
+
 const NOT_AIRPORT = new Set(['CPF', 'BRL', 'USD', 'EUR', 'PDF', 'LTD', 'CNH', 'GMT', 'UTC', 'TAP', 'PNR', 'VAT', 'ATM', 'CEP', 'NIF']);
 const PLACES = { BRA:['brasileiro','Brasil'], PRT:['português','Portugal'], ITA:['italiano','Itália'], ESP:['espanhol','Espanha'], D:['alemão','Alemanha'], DEU:['alemão','Alemanha'], FRA:['francês','França'], USA:['americano','Estados Unidos'], ARG:['argentino','Argentina'], GBR:['britânico','Reino Unido'], URY:['uruguaio','Uruguai'], PRY:['paraguaio','Paraguai'], CHL:['chileno','Chile'], JPN:['japonês','Japão'], CAN:['canadense','Canadá'], MEX:['mexicano','México'], POL:['polonês','Polônia'], NLD:['holandês','Holanda'], CHE:['suíço','Suíça'], IRL:['irlandês','Irlanda'], AUS:['australiano','Austrália'], NZL:['neozelandês','Nova Zelândia'], CHN:['chinês','China'], IND:['indiano','Índia'], COL:['colombiano','Colômbia'], PER:['peruano','Peru'], AUT:['austríaco','Áustria'], BEL:['belga','Bélgica'], GRC:['grego','Grécia'], ISR:['israelense','Israel'], ZAF:['sul-africano','África do Sul'], KOR:['sul-coreano','Coreia do Sul'] };
 
@@ -241,8 +265,13 @@ function holderFrom(text){
   return s.split(' ').length >= 2 ? titleCase(s) : '';
 }
 
+const MONEY = /(?:R\$|US\$|USD|EUR|€|£|GBP|\$)\s?\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d{2})?|\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s?(?:EUR|€|USD|BRL|reais)/i;
+const money = (T, re) => { const m = T.match(re); return m ? (m[1].match(MONEY) || [m[1]])[0].replace(/\s+/g, ' ').trim() : '' };
+// Hora (HH:MM) logo depois de um rótulo
+const timeAfter = (T, re) => { const m = T.match(re); return m ? m[1].replace(/h/i, ':').padStart(5, '0') : '' };
+
 function fromText(type, text){
-  const r = {}, dates = findDates(text), fut = future(dates), T = text;
+  const r = { x: {} }, X = r.x, dates = findDates(text), fut = future(dates), T = text;
   // rótulo e valor podem estar em linhas diferentes (comum em PDF e OCR)
   const exp = near(dates, /(validade|v[áa]lid[oa]\s+at[ée]|valid\s+(?:until|thru|through)|expira|expiry|expiration|vencimento)[\s\S]{0,30}$/i);
   if (MRZ_TYPES.has(type)) {
@@ -255,21 +284,36 @@ function fromText(type, text){
       const codes = [...T.matchAll(/\(([A-Z]{3})\)/g)].map(m => m[1]).filter(c => !NOT_AIRPORT.has(c));
       let [org, dst] = [...new Set(codes)];
       if (!dst) { const m = T.match(/\b([A-Z]{3})\s*(?:-|–|→|>|\/|para|to)\s*([A-Z]{3})\b/); if (m && !NOT_AIRPORT.has(m[1]) && !NOT_AIRPORT.has(m[2])) [org, dst] = [m[1], m[2]] }
+      const city = code => { const m = T.match(new RegExp('([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .\'\\-]{2,28}?)\\s*\\(' + code + '\\)')); return m ? `${titleCase(m[1].replace(/^(de|para|from|to)\s+/i, ''))} (${code})` : code };
+      if (org && dst) X.route = `${city(org)} para ${city(dst)}`;
       const air = oneOf(T, AIRLINES);
-      const flight = grab(T, /\b(?:voo|flight|vuelo)\s*(?:n[º°o.]*)?\s*:?\s*([A-Z0-9]{2}\s?\d{2,4})\b/i);
+      X.flight = grab(T, /\b(?:voo|flight|vuelo)\s*(?:n[º°o.]*)?\s*:?\s*([A-Z0-9]{2}\s?\d{2,4})\b/i).toUpperCase().replace(/\s+/, ' ');
+      X.seat = grab(T, /(?:assento|poltrona|seat|asiento)\s*(?:n[º°o.]*)?\s*[:\-]?\s*(\d{1,2}\s?[A-K])\b/i).replace(/\s/, '').toUpperCase();
+      X.group = grab(T, /(?:grupo(?:\s+de\s+embarque)?|boarding\s+group|group|zona|zone)\s*[:\-]?\s*([A-Z0-9]{1,2})\b/i).toUpperCase();
+      X.gate = grab(T, /(?:port[ãa]o(?:\s+de\s+embarque)?|gate|puerta)\s*[:\-]?\s*([A-Z]?\d{1,3}[A-Z]?)\b/i).toUpperCase();
+      const day = fut[0]?.date;
+      // decolagem: rótulo explícito, ou a hora escrita logo depois da 1ª data
+      let dep = timeAfter(T, /(?:decolagem|partida|sa[íi]da|departure|departs?|hor[áa]rio\s+do\s+voo)[^\d\n]{0,25}(?:\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+)?(\d{1,2}[:h]\d{2})\b/i);
+      if (!dep && fut[0]) { const m = T.slice(fut[0].i, fut[0].i + 40).match(/\b(\d{1,2}[:h]\d{2})\b/); if (m) dep = m[1].replace(/h/i, ':').padStart(5, '0') }
+      const brd = timeAfter(T, /(?:embarque|boarding)(?:\s+time|\s+[àa]s|\s+at)?[^\d\n]{0,20}(\d{1,2}[:h]\d{2})\b/i);
+      if (day && dep) X.departure = `${day}T${dep}`;
+      if (day && brd) X.boarding = `${day}T${brd}`;
       r.title = [air || 'Passagem', org && dst ? `${org} para ${dst}` : ''].filter(Boolean).join(' ');
-      if (flight) r.notes = `Voo ${flight.toUpperCase()}`;
-      r.start = fut[0]?.date; r.end = latest(fut); r.expires = r.end;
+      r.start = day; r.end = latest(fut);
       break;
     }
     case 'stay': {
-      r.number = grab(T, /(?:n[úu]mero\s+(?:da\s+)?(?:reserva|confirma[çc][ãa]o)|c[óo]digo\s+(?:da\s+)?reserva|confirma[çc][ãa]o|confirmation\s*(?:number|no\.?|#|code)?|booking\s*(?:number|no\.?|id|#|reference)|reserva\s*(?:n[º°o.]*|#))\s*[:#]?\s*\n?\s*([A-Z0-9][A-Z0-9.\-]{4,20})\b/i, s => /\d/.test(s));
-      const hotel = (T.split('\n').map(l => l.trim()).find(l => l.length <= 60 && /\b(hotel|pousada|hostel|resort|inn|suites|apart|residence|albergue|apartamento|guesthouse|b&b)\b/i.test(l) && !/check|reserva|confirma/i.test(l)) || '');
+      r.number = grab(T, /(?:n[úu]mero\s+(?:da\s+)?(?:reserva|confirma[çc][ãa]o)|c[óo]digo\s+(?:da\s+)?reserva|localizador|confirma[çc][ãa]o|confirmation\s*(?:number|no\.?|#|code)?|booking\s*(?:number|no\.?|id|#|reference)|reserva\s*(?:n[º°o.]*|#))\s*[:#]?\s*\n?\s*([A-Z0-9][A-Z0-9.\-]{4,20})\b/i, s => /\d/.test(s));
+      const lines = T.split('\n').map(l => l.trim());
+      const hotel = lines.find(l => l.length <= 60 && /\b(hotel|pousada|hostel|resort|inn|suites|apart|residence|albergue|apartamento|guesthouse|b&b)\b/i.test(l) && !/check|reserva|confirma|endere/i.test(l)) || '';
       const plat = oneOf(T, STAYS);
-      r.title = hotel ? titleCase(hotel).replace(/\bhotel\b/i, 'Hotel') : plat ? `Hospedagem ${plat}` : 'Hospedagem';
-      r.start = near(dates, /(check-?in|entrada|chegada|arrival)\b[^\n]{0,20}$/i) || fut[0]?.date;
-      r.end = near(dates, /(check-?out|sa[íi]da|partida|departure)\b[^\n]{0,20}$/i) || latest(fut);
-      r.expires = r.end;
+      X.hotel = hotel ? titleCase(hotel).replace(/\bhotel\b/i, 'Hotel') : '';
+      X.address = grab(T, /(?:endere[çc]o|address|localiza[çc][ãa]o|direcci[óo]n)\s*[:\-]?\s*\n?\s*([^\n]{8,120})/i)
+        || lines.find(l => l.length <= 120 && /\b(rua|r\.|av\.?|avenida|alameda|travessa|pra[çc]a|largo|rodovia|street|st\.|road|rd\.|avenue|ave\.|calle|via|rue|strasse|straße|platz)\b/i.test(l) && /\d/.test(l)) || '';
+      r.title = X.hotel || (plat ? `Hospedagem ${plat}` : 'Hospedagem');
+      X.checkin = near(dates, /(check-?in|entrada|chegada|arrival)\b[\s\S]{0,25}$/i) || fut[0]?.date || '';
+      X.checkout = near(dates, /(check-?out|sa[íi]da|partida|departure)\b[\s\S]{0,25}$/i) || latest(fut) || '';
+      r.start = X.checkin; r.end = X.checkout;
       if (plat && hotel) r.notes = `Reservado pelo ${plat}`;
       break;
     }
@@ -277,24 +321,46 @@ function fromText(type, text){
       r.number = grab(T, /(?:ap[óo]lice|voucher|certificado|bilhete|policy|n[º°o.]?\s*do\s*seguro)\s*(?:n[º°o.]*|number|no\.?)?\s*[:#]?\s*\n?\s*([A-Z0-9][A-Z0-9.\-\/]{4,24})\b/i, s => /\d/.test(s));
       const ins = oneOf(T, INSURERS);
       r.title = ins ? `Seguro ${ins}` : 'Seguro viagem';
-      const cov = T.match(/(?:cobertura|despesas\s+m[ée]dicas|medical)[^\n]{0,60}?((?:USD|US\$|EUR|€|R\$)\s?[\d.,]{3,})/i);
-      if (cov) r.notes = `Cobertura médica: ${cov[1].replace(/\s+/g, ' ')}`;
+      X.value = money(T, /(?:valor\s+(?:da\s+)?ap[óo]lice|valor\s+segurado|cobertura(?:\s+m[ée]dica)?|despesas\s+m[ée]dicas|medical|capital\s+segurado)[^\n]{0,60}?((?:R\$|US\$|USD|EUR|€|£)\s?[\d.,]{3,}|[\d.,]{3,}\s?(?:EUR|€|USD))/i)
+        || money(T, /(?:valor\s+total|total\s+pago|pr[êe]mio|total)[^\n]{0,30}?((?:R\$|US\$|USD|EUR|€)\s?[\d.,]{3,})/i);
       r.start = near(dates, /(in[íi]cio|de|from|vig[êe]ncia|sa[íi]da)\s*[:\-]?\s*$/i) || fut[0]?.date;
       r.end = near(dates, /(fim|t[ée]rmino|at[ée]|to|until|retorno|volta)\s*[:\-]?\s*$/i) || latest(fut);
       r.expires = r.end;
       break;
     }
     case 'money': {
-      const bank = oneOf(T, BANKS), last = latest(dates);
-      const mon = last ? new Date(last + 'T00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', '').replace(' de ', '/') : '';
-      const kind = /extrato|statement/i.test(T) ? 'Extrato' : /holerite|contracheque|payslip/i.test(T) ? 'Holerite' : /imposto|irpf|declara[çc][ãa]o/i.test(T) ? 'Declaração de IR' : /comprovante/i.test(T) ? 'Comprovante' : 'Comprovante financeiro';
+      const bank = oneOf(T, BANKS);
+      X.place = grab(T, /(?:estabelecimento|local|favorecido|recebedor|benefici[áa]rio|merchant|loja|empresa)\s*[:\-]\s*([^\n]{3,60})/i) || bank;
+      X.date = near(dates, /(data(?:\s+da\s+transa[çc][ãa]o|\s+do\s+pagamento)?|date|em)\s*[:\-]?\s*$/i) || latest(dates) || '';
+      X.value = money(T, /(?:valor(?:\s+total|\s+pago)?|total|saldo(?:\s+final|\s+dispon[íi]vel)?|amount|quantia)\s*[:\-]?\s*\n?\s*([^\n]{2,30})/i) || (T.match(MONEY) || [''])[0].trim();
+      const mon = X.date ? new Date(X.date + 'T00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', '').replace(' de ', '/') : '';
+      const kind = /extrato|statement/i.test(T) ? 'Extrato' : /holerite|contracheque|payslip/i.test(T) ? 'Holerite' : /imposto|irpf|declara[çc][ãa]o/i.test(T) ? 'Declaração de IR' : /comprovante|recibo|receipt/i.test(T) ? 'Comprovante' : 'Comprovante financeiro';
       r.title = [kind, bank, mon].filter(Boolean).join(' ');
       break;
     }
     case 'health': {
-      const v = /febre\s+amarela|yellow\s+fever/i.test(T) ? 'febre amarela' : /covid|sars-cov/i.test(T) ? 'covid-19' : /sarampo|measles|tr[íi]plice/i.test(T) ? 'sarampo' : /poliomielite|polio/i.test(T) ? 'poliomielite' : '';
-      r.title = /certificado\s+internacional|international\s+certificate/i.test(T) ? `Certificado internacional de vacinação${v ? ` (${v})` : ''}` : v ? `Vacina ${v}` : '';
-      r.expires = exp;
+      const v = /febre\s+amarela|yellow\s+fever/i.test(T) ? 'Febre amarela' : /covid|sars-cov/i.test(T) ? 'Covid-19' : /sarampo|measles|tr[íi]plice/i.test(T) ? 'Sarampo' : /poliomielite|polio/i.test(T) ? 'Poliomielite' : /hepatite\s*[ab]?/i.test(T) ? titleCase(T.match(/hepatite\s*[ab]?/i)[0]) : /t[ée]tano|dtpa|dupla\s+adulto/i.test(T) ? 'Tétano' : '';
+      const civp = /certificado\s+internacional|international\s+certificate/i.test(T);
+      X.what = v ? `Vacina ${v.toLowerCase()}` : civp ? 'Certificado internacional de vacinação' : /exame|laudo|resultado/i.test(T) ? 'Exame' : /receita|prescri/i.test(T) ? 'Receita médica' : '';
+      X.date = near(dates, /(data|date|aplica[çc][ãa]o|vacina[çc][ãa]o|dose)[\s\S]{0,20}$/i) || dates[0]?.date || '';
+      r.number = grab(T, /(?:n[º°o.]?\s*(?:do\s+)?(?:certificado|registro|documento)|(?:certificado|registro)\s*n[º°o.]*|certificate\s*(?:no\.?|number)|lote|batch|lot)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/.]{3,20})\b/i, s => /\d/.test(s));
+      r.title = civp ? `Certificado internacional de vacinação${v ? ` (${v.toLowerCase()})` : ''}` : X.what;
+      break;
+    }
+    case 'tour': {
+      const op = oneOf(T, TOURS);
+      r.number = grab(T, /(?:localizador|c[óo]digo\s+(?:de\s+)?(?:reserva|confirma[çc][ãa]o)|refer[êe]ncia(?:\s+da\s+reserva)?|booking\s+(?:reference|code|ref\.?|number|id)|confirmation\s+(?:code|number)|order\s*(?:number|#)|reserva\s*(?:n[º°o.]*|#)?)\s*[:#\-]?\s*\n?\s*([A-Z0-9][A-Z0-9\-]{4,20})\b/i, s => /\d/.test(s) || /^[A-Z]{6,}$/.test(s));
+      const lines = T.split('\n').map(l => l.trim());
+      const name = lines.find(l => l.length >= 8 && l.length <= 90 && /\b(tour|passeio|visita|ingresso|entrada|ticket|excurs[ãa]o|excursion|experi[êe]ncia|cruzeiro|cruise|museu|museum|aula|class|show|day trip|bate-volta|degusta[çc][ãa]o|tasting)\b/i.test(l) && !/getyourguide|viator|civitatis|klook|tiqets|voucher|confirma|obrigad|thank/i.test(l)) || '';
+      X.name = name;
+      X.what = /museu|museum|ingresso|entrada|admission|skip.the.line/i.test(T) ? 'Ingresso' : /excurs|day trip|bate-volta/i.test(T) ? 'Excursão' : /cruzeiro|cruise|barco|boat|catamar/i.test(T) ? 'Passeio de barco' : /degusta|tasting|vin[íi]cola|winery|food tour/i.test(T) ? 'Degustação' : /aula|class|workshop|oficina/i.test(T) ? 'Aula' : /show|espet[áa]culo|concert|fado|flamenco/i.test(T) ? 'Show' : /tour|passeio|visita|walking/i.test(T) ? 'Passeio guiado' : '';
+      X.date = near(dates, /(data|date|dia|quando|when)[\s\S]{0,20}$/i) || fut[0]?.date || '';
+      const tm = timeAfter(T, /(?:hor[áa]rio|hora|time|in[íi]cio|starts?|come[çc]a)[^\d\n]{0,20}(\d{1,2}[:h]\d{2})\b/i);
+      if (tm) X.time = tm;
+      const meet = grab(T, /(?:ponto\s+de\s+encontro|meeting\s+point|local\s+de\s+encontro|punto\s+de\s+encuentro)\s*[:\-]?\s*\n?\s*([^\n]{6,120})/i);
+      r.notes = [op && `Reservado pelo ${op}`, meet && `Ponto de encontro: ${meet}`].filter(Boolean).join('\n');
+      r.title = name ? name.slice(0, 60) : op ? `Tour ${op}` : 'Tour';
+      r.start = r.end = X.date;
       break;
     }
     case 'id': {
@@ -310,12 +376,15 @@ function fromText(type, text){
     case 'passport':
       r.number = grab(T, /(?:passport\s*no\.?|n[º°o.]?\s*do\s*passaporte|passaporte\s*n[º°o.]?|n[º°o.]\s*passaporte)\s*[:\/]?\s*\n?\s*([A-Z]{1,2}\d{6,8})\b/i);
       r.expires = exp;
+      X.issued = r.issued || '';
       break;
     case 'visa': {
       const kind = grab(T, /(?:tipo\s+de\s+visto|visa\s+type|type\s+of\s+visa|categoria|tipo|type)\s*[:\/]?\s*([A-Z]{1,2}\d{0,2}(?:-\d)?)\b/i);
       r.title = kind ? `Visto ${kind.toUpperCase()}` : '';
       r.number = grab(T, /(?:visa\s*n[º°o.]*|n[º°o.]\s*do\s*visto|control\s+number|n[úu]mero)\s*[:#]?\s*([A-Z0-9]{6,12})\b/i, s => /\d/.test(s));
-      r.expires = near(dates, /(until|at[ée]|expira|expiration|expiry|validade|v[áa]lido)\s*[:\-]?\s*$/i) || exp;
+      r.expires = near(dates, /(until|at[ée]|expira|expiration|expiry|validade|v[áa]lido)[\s\S]{0,30}$/i) || exp;
+      const pl = grab(T, /(?:local\s+de\s+emiss[ãa]o|place\s+of\s+issue|issued\s+(?:at|in)|emitido\s+em|lugar\s+de\s+expedici[óo]n)\s*[:\/]?\s*\n?\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .\-]{2,40})/i);
+      X.place = pl ? titleCase(pl) : '';
       break;
     }
     default: {
@@ -324,6 +393,7 @@ function fromText(type, text){
       r.expires = exp;
     }
   }
+  for (const k in X) if (!X[k]) delete X[k];
   r.holder = holderFrom(T);
   r.dates = fut.map(d => d.date);
   return r;
@@ -363,22 +433,10 @@ const PHOTO_TRIES = [{ crop: [.55, 1], maxW: 1800 }, { crop: [.3, 1], maxW: 1800
 const PDF_FIRST = [{ maxW: 3000 }, { crop: [.5, 1], maxW: 2400 }, { rotate: 90, maxW: 3000 }, { rotate: 270, maxW: 3000 }];
 const PDF_REST = [{ maxW: 3000 }];
 
-async function read(files, type, status = () => {}){
-  const out = { filled: [] }, mrzType = MRZ_TYPES.has(type);
-  const set = (k, v) => { if (v && !out[k]) { out[k] = v; out.filled.push(k) } };
-  const applyMRZ = m => {
-    if (!m) return false;
-    set('number', m.number); set('holder', m.holder); set('expires', m.expires);
-    const nat = PLACES[m.nationality]?.[0], place = PLACES[m.country]?.[1];
-    if (type === 'passport') set('title', nat ? `Passaporte ${nat}` : 'Passaporte');
-    if (type === 'visa') set('title', place ? `Visto ${place}` : 'Visto');
-    if (type === 'id' && m.kind === 'I') set('title', 'Carteira de identidade');
-    out.birth ||= m.birth; out.nationality ||= m.nationality;
-    out.mrz = true; out.numberOk = m.numberOk;
-    return true;
-  };
+// forcedType vazio = o Carimbo descobre o tipo sozinho
+async function read(files, forcedType, status = () => {}){
   const engine = async () => { if (!ocrP) status('Preparando o leitor. Isso só demora na primeira vez…'); await ocr() };
-  let allText = '';
+  let allText = '', mrz = null;
   for (const f of files) {
     const isPdf = f.type === 'application/pdf';
     let t = '', pages = [];
@@ -387,58 +445,66 @@ async function read(files, type, status = () => {}){
       const pdf = await openPdf(f);
       t = await pdfText(pdf);
       pages = Array.from({ length: Math.min(pdf.numPages, 3) }, (_, i) => () => renderPage(pdf, i + 1));
-      if (mrzType && !out.mrz) applyMRZ(parseMRZ(t));
     } else if (f.type.startsWith('image/')) pages = [() => f.blob];
-
-    const noText = t.replace(/\s/g, '').length <= 40;
-    // Documento com faixa MRZ: lê a página, acha a faixa e amplia só ela
-    if (mrzType && !out.mrz && pages.length) {
+    const hasText = t.replace(/\s/g, '').length > 40;
+    if (!mrz && hasText) mrz = parseMRZ(t);
+    // Só procura a faixa MRZ nas imagens quando parece documento pessoal (ou ainda não dá para saber)
+    const guess = forcedType || classify(t, mrz);
+    const seekMRZ = !mrz && (MRZ_TYPES.has(guess) || (!forcedType && guess === 'other'));
+    if (pages.length && (!hasText || seekMRZ)) {
       await engine();
       for (const [i, get] of pages.entries()) {
         status(i ? `Procurando na página ${i + 1}…` : 'Lendo o documento…');
         const pg = await ocrPage(await get(), isPdf ? 3000 : 2400);
-        if (noText) t = (t + '\n' + pg.text).trim();
-        if (applyMRZ(parseMRZ(pg.text))) break;
-        status('Lendo a faixa de códigos…');
-        if (applyMRZ(await mrzFromPage(pg))) break;
-        // Página quase sem texto legível: pode estar girada
-        if (i === 0 && pg.text.replace(/\s/g, '').length < 60) {
+        if (!hasText && i === 0) t = (t + '\n' + pg.text).trim();
+        if (!mrz) mrz = parseMRZ(pg.text);
+        if (!mrz) { status('Lendo a faixa de códigos…'); mrz = await mrzFromPage(pg) }
+        if (!mrz && i === 0 && pg.text.replace(/\s/g, '').length < 60) {
           status('Procurando com a imagem girada…');
-          if (applyMRZ(await readMRZ(await get(), status, isPdf ? PDF_FIRST.slice(2) : PHOTO_TRIES.slice(3)))) break;
+          mrz = await readMRZ(await get(), status, isPdf ? PDF_FIRST.slice(2) : PHOTO_TRIES.slice(3));
         }
+        if (mrz) break;
+        // Páginas seguintes só valem a pena para passaporte/visto/RG
+        if (!MRZ_TYPES.has(forcedType || classify(t, null))) break;
       }
     }
-    // Outros documentos: texto do PDF; se não houver, OCR da imagem
-    if (!t.replace(/\s/g, '') && pages.length) {
-      await engine();
-      status('Lendo o texto do documento…');
-      t = await ocrText(await pages[0]());
-    }
-    if (out.mrz && out.holder && t) out.holder = fixName(out.holder, t);
-    if (t) {
-      allText += t + '\n';
-      const r = fromText(type, t);
-      for (const k of ['title', 'number', 'holder', 'expires', 'notes']) set(k, r[k]);
-      out.start ||= r.start; out.end ||= r.end; out.issued ||= r.issued; out.birth ||= r.birth;
-      out.dates = [...(out.dates || []), ...r.dates];
-    }
+    allText += t + '\n';
   }
-  // Documentos pessoais: o resto do que foi lido vai para as observações
-  if (mrzType) {
+
+  const type = forcedType || classify(allText, mrz);
+  const out = { type, detected: !forcedType, filled: [], x: {} };
+  const set = (k, v) => { if (v && !out[k]) { out[k] = v; out.filled.push(k) } };
+  const setx = (k, v) => { if (v && !out.x[k]) { out.x[k] = v; out.filled.push('x.' + k) } };
+
+  if (mrz && MRZ_TYPES.has(type)) {
+    set('number', mrz.number); set('holder', mrz.holder); set('expires', mrz.expires);
+    const nat = PLACES[mrz.nationality]?.[0], place = PLACES[mrz.country]?.[1];
+    if (type === 'passport') set('title', nat ? `Passaporte ${nat}` : 'Passaporte');
+    if (type === 'visa') { set('title', place ? `Visto ${place}` : 'Visto'); setx('place', place) }
+    if (type === 'id' && mrz.kind === 'I') set('title', 'Carteira de identidade');
+    out.birth = mrz.birth; out.nationality = mrz.nationality;
+    out.mrz = true; out.numberOk = mrz.numberOk;
+    if (out.holder && allText.trim()) out.holder = fixName(out.holder, allText);
+  }
+  if (allText.trim()) {
+    const r = fromText(type, allText);
+    for (const k of ['title', 'number', 'holder', 'expires', 'notes']) set(k, r[k]);
+    for (const [k, v] of Object.entries(r.x || {})) setx(k, v);
+    out.start = r.start; out.end = r.end; out.birth ||= r.birth;
+    out.dates = r.dates;
+  }
+  // Documentos pessoais: nascimento e nacionalidade vão para as observações
+  if (MRZ_TYPES.has(type)) {
     const br = d => d.split('-').reverse().join('/');
-    const extra = [
-      out.birth && `Nascimento: ${br(out.birth)}`,
-      PLACES[out.nationality] && `Nacionalidade: ${PLACES[out.nationality][1]}`,
-      out.issued && `Emissão: ${br(out.issued)}`,
-    ].filter(Boolean);
+    const extra = [out.birth && `Nascimento: ${br(out.birth)}`, PLACES[out.nationality] && `Nacionalidade: ${PLACES[out.nationality][1]}`].filter(Boolean);
     if (extra.length) {
       out.notes = [out.notes, ...extra].filter(Boolean).join('\n');
       if (!out.filled.includes('notes')) out.filled.push('notes');
     }
   }
-  out.text = allText.slice(0, 8000);
+  out.text = allText.trim().slice(0, 8000);
   return out;
 }
 
-window.Extract = { read, parseMRZ, fromText, findDates, pdfThumb, warm: () => ocr().catch(() => {}) };
+window.Extract = { read, parseMRZ, fromText, classify, findDates, pdfThumb, warm: () => ocr().catch(() => {}) };
 })();
