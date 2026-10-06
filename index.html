@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1F3A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Carimbo">
+<title>Carimbo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F4F6FA; --card:#FFFFFF; --sunk:#E9EDF4;
+  --ink:#0E1F3A; --ink-2:#4F5D78; --ink-3:#8793AA; --line:#DCE2EC;
+  --stamp:#6A3FC4; --stamp-soft:#EEE8FB; --on-stamp:#FFFFFF;
+  --ok:#1D7A55; --ok-soft:#E2F2EA; --warn:#94560B; --warn-soft:#FBEFDC; --bad:#B42335; --bad-soft:#FBE5E8;
+  --sans:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --shadow:0 1px 0 rgba(14,31,58,.04),0 6px 20px -12px rgba(14,31,58,.25);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --paper:#0B1322; --card:#14203A; --sunk:#1B2944;
+  --ink:#E9EEF8; --ink-2:#A7B3CA; --ink-3:#71809D; --line:#26365A;
+  --stamp:#A88CFF; --stamp-soft:#2A2350; --on-stamp:#14092E;
+  --ok:#5CCB9A; --ok-soft:#14352A; --warn:#F0B35E; --warn-soft:#3A2A12; --bad:#FF7F8E; --bad-soft:#3E1A22;
+  --shadow:0 1px 0 rgba(0,0,0,.2),0 8px 24px -14px rgba(0,0,0,.6);
+  color-scheme:dark;
+}}
+:root[data-theme=dark]{
+  --paper:#0B1322; --card:#14203A; --sunk:#1B2944;
+  --ink:#E9EEF8; --ink-2:#A7B3CA; --ink-3:#71809D; --line:#26365A;
+  --stamp:#A88CFF; --stamp-soft:#2A2350; --on-stamp:#14092E;
+  --ok:#5CCB9A; --ok-soft:#14352A; --warn:#F0B35E; --warn-soft:#3A2A12; --bad:#FF7F8E; --bad-soft:#3E1A22;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.45 var(--sans);min-height:100dvh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--stamp);outline-offset:2px;border-radius:8px}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* Topo */
+.top{position:relative;padding:calc(env(safe-area-inset-top) + 18px) 0 0;overflow:hidden}
+.top-row{display:flex;align-items:center;gap:12px}
+.mark{display:flex;align-items:center;gap:10px;font-weight:800;font-size:26px;letter-spacing:-.02em;margin:0}
+.mark svg{width:34px;height:34px;flex:none}
+.top-row .icon-btn{margin-left:auto}
+.icon-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);display:grid;place-items:center}
+.icon-btn svg{width:20px;height:20px}
+.next{margin:14px 0 0;font-size:15px;color:var(--ink-2)}
+.next b{color:var(--ink);font-weight:600}
+.guil{display:block;height:34px;margin-top:10px;color:var(--stamp);opacity:.35}
+.guil svg{width:100%;height:100%}
+
+/* Filtros */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:14px 16px 4px;margin:0 -16px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-weight:500;font-size:15px;white-space:nowrap}
+.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.chip.add{border-style:dashed;background:transparent;color:var(--ink-2)}
+.chip small{font-size:13px;opacity:.65;margin-left:4px}
+
+h2.sec{font-size:17px;font-weight:700;margin:26px 0 10px;display:flex;align-items:baseline;gap:8px}
+h2.sec .link{margin-left:auto;font-size:15px;font-weight:600;color:var(--stamp);background:none;border:0;padding:4px 0}
+
+/* Alerta */
+.alert{margin-top:18px;border-radius:16px;background:var(--warn-soft);color:var(--warn);padding:14px 16px;font-size:15px}
+.alert.bad{background:var(--bad-soft);color:var(--bad)}
+.alert strong{display:block;font-weight:700;margin-bottom:2px}
+.alert button{background:none;border:0;padding:0;color:inherit;text-decoration:underline;font-weight:600}
+
+/* À mão */
+.hand{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{position:relative;aspect-ratio:1.42;border:0;border-radius:18px;overflow:hidden;padding:0;text-align:left;background:var(--tc,var(--ink));color:#fff;box-shadow:var(--shadow)}
+.tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.5}
+.tile::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,15,30,.55),transparent 45%,rgba(8,15,30,.5))}
+.tile span{z-index:1}
+.tile span{position:absolute;left:12px;right:12px}
+.tile .t{top:12px;font-weight:700;font-size:16px;line-height:1.2}
+.tile .n{bottom:12px;font-family:var(--mono);font-size:14px;letter-spacing:.06em;opacity:.95}
+
+/* Lista */
+.list{display:grid;gap:10px}
+.doc{display:grid;grid-template-columns:56px 1fr;gap:4px 14px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 14px 0;box-shadow:var(--shadow);overflow:hidden;position:relative}
+.doc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--tc)}
+.thumb{width:56px;height:56px;border-radius:12px;background:var(--sunk);display:grid;place-items:center;overflow:hidden;color:var(--tc);font-weight:800;font-size:20px}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.doc-main{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.doc-title{font-weight:600;font-size:17px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-num{font-family:var(--mono);font-size:14px;color:var(--ink-2);letter-spacing:.04em}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:3px}
+.tag{font-size:12.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--sunk);color:var(--ink-2)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}
+.mrz{grid-column:1/-1;margin:12px -14px 0;padding:7px 14px 8px;border-top:1px dashed var(--line);font-family:var(--mono);font-size:12px;letter-spacing:.18em;color:var(--ink-3);white-space:nowrap;overflow:hidden}
+
+/* Viagem */
+.trip{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:var(--shadow)}
+.trip h2{margin:0;font-size:24px;font-weight:800;letter-spacing:-.01em}
+.trip .when{color:var(--ink-2);margin:2px 0 0;font-size:15px}
+.progress{height:8px;border-radius:99px;background:var(--sunk);margin:16px 0 6px;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--ok);border-radius:99px;transition:width .3s}
+.pcount{font-size:14px;color:var(--ink-2)}
+.checks{list-style:none;padding:0;margin:10px 0 0}
+.checks li{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
+.checks label{display:flex;align-items:center;gap:12px;flex:1;min-height:32px;cursor:pointer}
+.checks input[type=checkbox]{width:24px;height:24px;accent-color:var(--ok);flex:none}
+.checks .done span{color:var(--ink-3);text-decoration:line-through}
+.checks .x{border:0;background:none;color:var(--ink-3);width:36px;height:36px;border-radius:50%;font-size:20px}
+.addcheck{display:flex;gap:8px;margin-top:10px}
+.addcheck input{flex:1}
+.row-btns{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+
+/* Botões */
+.btn{height:52px;padding:0 20px;border-radius:999px;border:0;font-weight:700;font-size:16px;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.btn svg{width:20px;height:20px}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn.stamp{background:var(--stamp);color:var(--on-stamp)}
+.btn.ghost{background:var(--sunk);color:var(--ink)}
+.btn.danger{background:var(--bad-soft);color:var(--bad)}
+.btn.sm{height:42px;font-size:15px;padding:0 16px}
+.btn.grow{flex:1}
+
+.fab{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(env(safe-area-inset-bottom) + 14px);background:linear-gradient(to top,var(--paper) 60%,transparent);pointer-events:none}
+.fab .wrap{display:flex;gap:10px;padding:0;pointer-events:auto}
+.fab .btn{flex:1;box-shadow:0 10px 24px -10px rgba(14,31,58,.5)}
+main{padding-bottom:120px}
+
+.empty{text-align:center;padding:40px 12px 20px;color:var(--ink-2)}
+.empty svg{width:120px;height:120px;color:var(--stamp);opacity:.7}
+.empty h3{color:var(--ink);font-size:20px;margin:10px 0 6px}
+.empty p{margin:0 auto;max-width:34ch}
+
+/* Diálogos */
+dialog{border:0;padding:0;background:var(--paper);color:var(--ink);width:100%;max-width:560px;max-height:100dvh;margin:auto auto 0;border-radius:24px 24px 0 0}
+dialog::backdrop{background:rgba(8,15,30,.55)}
+dialog[open]{animation:up .28s cubic-bezier(.2,.8,.2,1)}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+@media (min-width:600px){dialog{margin:auto;border-radius:24px;max-height:92dvh}}
+.sheet{display:flex;flex-direction:column;max-height:inherit}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
+.sheet-h h2{margin:0;font-size:20px;font-weight:800;flex:1}
+.sheet-b{overflow:auto;padding:4px 16px 16px}
+.sheet-f{display:flex;gap:10px;padding:12px 16px calc(env(safe-area-inset-bottom) + 14px);border-top:1px solid var(--line)}
+.field{display:block;margin-top:14px}
+.field>span{display:block;font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+.field small{display:block;color:var(--ink-3);font-size:13px;margin-top:5px}
+.inp{width:100%;height:50px;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:0 14px;font-size:16px}
+textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
+.inp.mono{font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.types{display:flex;flex-wrap:wrap;gap:8px}
+.types label{position:relative}
+.types input{position:absolute;opacity:0}
+.types span{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-weight:500;font-size:15px}
+.types span::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--tc)}
+.types input:checked+span{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.types input:focus-visible+span{outline:3px solid var(--stamp);outline-offset:2px}
+.switch{display:flex;align-items:center;gap:12px;margin-top:16px;font-weight:500}
+.switch input{width:24px;height:24px;accent-color:var(--stamp)}
+.files{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:8px}
+.fthumb{position:relative;aspect-ratio:1;border-radius:12px;background:var(--sunk);overflow:hidden;display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--ink-2)}
+.fthumb img{width:100%;height:100%;object-fit:cover}
+.fthumb button{position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(8,15,30,.7);color:#fff;font-size:16px;line-height:1}
+.pick{display:flex;gap:8px;flex-wrap:wrap}
+.pick label{cursor:pointer}
+.pick input{position:absolute;opacity:0;width:1px;height:1px}
+
+/* Visualizador */
+#viewer{max-width:none;height:100dvh;max-height:100dvh;margin:0;border-radius:0;background:var(--paper)}
+#viewer[open]{animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+.v{display:flex;flex-direction:column;height:100%}
+.v-h{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 12px 8px}
+.v-h h2{flex:1;margin:0;font-size:18px;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v-body{flex:1;overflow:auto;max-width:760px;width:100%;margin:0 auto}
+.slides{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding:4px 16px;scrollbar-width:none}
+.slides::-webkit-scrollbar{display:none}
+.slide{flex:0 0 100%;scroll-snap-align:center;border-radius:18px;background:var(--sunk);overflow:hidden;display:grid;place-items:center;min-height:240px;max-height:58dvh}
+.slide img{width:100%;height:100%;max-height:58dvh;object-fit:contain;display:block;background:#fff}
+.slide iframe{width:100%;height:58dvh;border:0;background:#fff}
+.slide.nofile{color:var(--ink-3);padding:30px;text-align:center}
+.dots{display:flex;justify-content:center;gap:6px;margin:10px 0 0}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.dots i.on{background:var(--ink)}
+.info{padding:8px 16px 20px}
+.big-num{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:12px}
+.big-num div{flex:1;min-width:0}
+.big-num small{display:block;color:var(--ink-2);font-size:14px;font-weight:600}
+.big-num strong{display:block;font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:.08em;word-break:break-all}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.fact{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.fact small{display:block;color:var(--ink-2);font-size:14px;font-weight:600}
+.fact b{display:block;font-size:17px;font-weight:600;margin-top:2px}
+.fact.wide{grid-column:1/-1}
+.fact.ok b{color:var(--ok)} .fact.warn b{color:var(--warn)} .fact.bad b{color:var(--bad)}
+.notes{white-space:pre-wrap;font-weight:400!important;font-size:16px!important}
+.v-f{display:flex;align-items:center;gap:10px;padding:10px 16px calc(env(safe-area-inset-bottom) + 12px);border-top:1px solid var(--line);max-width:760px;width:100%;margin:0 auto}
+.v-f .count{flex:1;text-align:center;font-weight:600;color:var(--ink-2)}
+.present .big-num strong{font-size:34px}
+.present .fact b{font-size:20px}
+.present .v-h h2{font-size:22px}
+
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translate(-50%,20px);background:var(--ink);color:var(--paper);padding:12px 18px;border-radius:999px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.settings p{color:var(--ink-2);margin:6px 0 0}
+.settings .group{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:12px}
+.settings h3{margin:0;font-size:17px}
+.meter{font-family:var(--mono);font-size:14px;color:var(--ink-2)}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="top-row">
+      <h1 class="mark">
+        <svg viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-14 20 20)" fill="none" stroke="var(--stamp)"><circle cx="20" cy="20" r="16" stroke-width="2.6"/><circle cx="20" cy="20" r="11.5" stroke-width="1.2" stroke-dasharray="2.4 2"/></g><path d="M14 24c2.6-7.6 10.6-10 14.6-6" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round"/></svg>
+        Carimbo
+      </h1>
+      <button class="icon-btn" data-act="settings" aria-label="Backup e ajustes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+      </button>
+    </div>
+    <p class="next" id="next"></p>
+  </div>
+  <div class="guil" id="guil"></div>
+</header>
+
+<main id="app" class="wrap" aria-live="polite"></main>
+
+<div class="fab" id="fab"></div>
+
+<dialog id="form"></dialog>
+<dialog id="viewer"></dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ---------- Dados ---------- */
+const TYPES = {
+  passport:  { l:'Passaporte',            c:'P', col:'#1F3B73' },
+  visa:      { l:'Visto',                 c:'V', col:'#6A3FC4' },
+  id:        { l:'Identidade / CNH',      c:'I', col:'#2B6CB0' },
+  ticket:    { l:'Passagem',              c:'T', col:'#0F7C86' },
+  stay:      { l:'Hospedagem',            c:'H', col:'#B0661A' },
+  insurance: { l:'Seguro viagem',         c:'S', col:'#1D7A55' },
+  money:     { l:'Comprovante financeiro',c:'F', col:'#5A6880' },
+  health:    { l:'Saúde e vacinas',       c:'M', col:'#B42335' },
+  other:     { l:'Outro',                 c:'D', col:'#6B7280' },
+};
+const ORDER = Object.keys(TYPES);
+const CHECK_TEMPLATE = [
+  'Passaporte com 6+ meses de validade',
+  'Formulário do visto preenchido e impresso',
+  'Foto no padrão do consulado',
+  'Comprovante de renda e extratos',
+  'Seguro viagem',
+  'Reserva de hospedagem',
+  'Passagem de ida e volta',
+  'Comprovante de pagamento da taxa',
+];
+
+const $ = s => document.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = {
+  get(k){ try { return localStorage.getItem(k) } catch { return null } },
+  set(k,v){ try { localStorage.setItem(k,v) } catch {} },
+};
+
+/* IndexedDB: tudo fica só neste aparelho */
+const dbp = new Promise((res, rej) => {
+  const r = indexedDB.open('carimbo', 1);
+  r.onupgradeneeded = () => {
+    const db = r.result;
+    db.createObjectStore('docs',  { keyPath:'id' });
+    db.createObjectStore('trips', { keyPath:'id' });
+  };
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+async function tx(name, mode, fn){
+  const db = await dbp;
+  return new Promise((res, rej) => {
+    const t = db.transaction(name, mode), s = t.objectStore(name), req = fn(s);
+    t.oncomplete = () => res(req && req.result);
+    t.onerror = () => rej(t.error);
+  });
+}
+const dbAll = n => tx(n, 'readonly', s => s.getAll());
+const dbPut = (n, v) => tx(n, 'readwrite', s => s.put(v));
+const dbDel = (n, id) => tx(n, 'readwrite', s => s.delete(id));
+
+const state = { docs:[], trips:[], filter: store.get('carimbo.filter') || 'all' };
+
+/* ---------- Utilidades de data ---------- */
+const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d };
+const toDate = s => new Date(s + 'T00:00');
+const days = s => Math.round((toDate(s) - today()) / 864e5);
+const fmt = (s, y = true) => s ? toDate(s).toLocaleDateString('pt-BR', { day:'numeric', month:'short', ...(y ? { year:'numeric' } : {}) }).replace('.', '') : '';
+
+function status(d){
+  if (!d.expires) return null;
+  const n = days(d.expires);
+  if (n < 0) return { k:'bad', t:'Vencido' };
+  const limit = d.type === 'passport' ? 183 : 30;
+  if (n <= limit) return { k:'warn', t: n <= 60 ? `Vence em ${n} ${n === 1 ? 'dia' : 'dias'}` : `Vence em ${Math.round(n/30)} meses` };
+  return { k:'ok', t:`Válido até ${fmt(d.expires)}` };
+}
+
+function mrz(d){
+  const clean = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '<');
+  const line = `${TYPES[d.type]?.c || 'D'}<${clean(d.number) || '<<<<<<'}<<${clean(d.holder || d.title)}<<${(d.expires || '').replace(/-/g, '').slice(2)}`;
+  return (line + '<'.repeat(60)).slice(0, 60);
+}
+
+const urls = new WeakMap();
+const blobUrl = b => { if (!urls.has(b)) urls.set(b, URL.createObjectURL(b)); return urls.get(b) };
+const firstImg = d => (d.files || []).find(f => f.type.startsWith('image/'));
+
+/* ---------- Render ---------- */
+function sortDocs(a, b){
+  return (ORDER.indexOf(a.type) - ORDER.indexOf(b.type)) || a.title.localeCompare(b.title);
+}
+function tripsSorted(){
+  return state.trips.slice().sort((a, b) => (a.start || '9999').localeCompare(b.start || '9999'));
+}
+function tripWhen(t){
+  if (!t.start) return '';
+  const a = fmt(t.start, !t.end), b = t.end ? fmt(t.end) : '';
+  return b ? `${a} a ${b}` : a;
+}
+
+function renderNext(){
+  const now = today();
+  const active = state.trips.find(t => t.start && toDate(t.start) <= now && (!t.end || toDate(t.end) >= now));
+  const up = tripsSorted().find(t => t.start && toDate(t.start) > now);
+  const el = $('#next');
+  if (active) el.innerHTML = `Você está em <b>${esc(active.name)}</b>. Boa viagem.`;
+  else if (up) { const n = days(up.start); el.innerHTML = `<b>${esc(up.name)}</b> ${n === 1 ? 'é amanhã' : `em ${n} dias`}.`; }
+  else el.textContent = state.docs.length ? `${state.docs.length} ${state.docs.length === 1 ? 'documento guardado' : 'documentos guardados'} neste aparelho.` : 'Seus documentos de viagem, sempre à mão. Funciona sem internet.';
+}
+
+function docCard(d){
+  const t = TYPES[d.type] || TYPES.other, st = status(d), img = firstImg(d);
+  const trip = d.tripId && state.trips.find(x => x.id === d.tripId);
+  return `<button class="doc" style="--tc:${t.col}" data-act="open" data-id="${d.id}">
+    <span class="thumb">${img ? `<img src="${blobUrl(img.blob)}" alt="" loading="lazy">` : t.c}</span>
+    <span class="doc-main">
+      <span class="doc-title">${esc(d.title)}</span>
+      ${d.number ? `<span class="doc-num">${esc(d.number)}</span>` : ''}
+      <span class="tags">${st ? `<span class="tag ${st.k}">${st.t}</span>` : ''}${state.filter === 'all' && trip ? `<span class="tag">${esc(trip.name)}</span>` : ''}${(d.files||[]).length > 1 ? `<span class="tag">${d.files.length} arquivos</span>` : ''}</span>
+    </span>
+    <span class="mrz" aria-hidden="true">${esc(mrz(d))}</span>
+  </button>`;
+}
+
+function render(){
+  renderNext();
+  const f = state.filter;
+  const trip = state.trips.find(t => t.id === f);
+  if (f !== 'all' && f !== 'personal' && !trip) { state.filter = 'all'; return render(); }
+
+  let docs = state.docs.slice().sort(sortDocs);
+  if (f === 'personal') docs = docs.filter(d => !d.tripId);
+  else if (trip) docs = docs.filter(d => d.tripId === trip.id);
+
+  const chip = (id, label, n) => `<button class="chip" aria-pressed="${f === id}" data-act="filter" data-id="${id}">${esc(label)}${n != null ? `<small>${n}</small>` : ''}</button>`;
+  let h = `<nav class="chips" aria-label="Filtrar documentos">
+    ${chip('all', 'Tudo', state.docs.length)}
+    ${chip('personal', 'Pessoais', state.docs.filter(d => !d.tripId).length)}
+    ${tripsSorted().map(t => chip(t.id, t.name, state.docs.filter(d => d.tripId === t.id).length)).join('')}
+    <button class="chip add" data-act="new-trip">+ Nova viagem</button>
+  </nav>`;
+
+  if (trip) h += tripPanel(trip, docs);
+
+  if (f === 'all') {
+    const issues = state.docs.map(d => [d, status(d)]).filter(([, s]) => s && s.k !== 'ok');
+    if (issues.length) {
+      const bad = issues.some(([, s]) => s.k === 'bad');
+      h += `<div class="alert ${bad ? 'bad' : ''}" role="alert"><strong>${issues.length === 1 ? '1 documento precisa' : `${issues.length} documentos precisam`} de atenção</strong>
+        ${issues.map(([d, s]) => `<button data-act="open" data-id="${d.id}">${esc(d.title)}</button>: ${s.t.toLowerCase()}`).join('<br>')}
+        ${issues.some(([d]) => d.type === 'passport') ? '<br><small>Muitos países exigem passaporte válido por 6 meses após a entrada.</small>' : ''}</div>`;
+    }
+    const pinned = docs.filter(d => d.pinned);
+    if (pinned.length) {
+      h += `<h2 class="sec">À mão <button class="link" data-act="present" data-id="pinned">Apresentar</button></h2>
+      <div class="hand">${pinned.map(d => { const t = TYPES[d.type] || TYPES.other, img = firstImg(d);
+        return `<button class="tile" style="--tc:${t.col}" data-act="open" data-id="${d.id}">${img ? `<img src="${blobUrl(img.blob)}" alt="">` : ''}<span class="t">${esc(d.title)}</span><span class="n">${esc(d.number || t.l)}</span></button>` }).join('')}</div>`;
+    }
+  }
+
+  if (docs.length) {
+    h += `<h2 class="sec">${trip ? 'Documentos da viagem' : 'Documentos'}</h2><div class="list">${docs.map(docCard).join('')}</div>`;
+  } else {
+    h += `<div class="empty">
+      <svg viewBox="0 0 120 120" aria-hidden="true"><g transform="rotate(-12 60 60)" fill="none" stroke="currentColor"><circle cx="60" cy="60" r="44" stroke-width="5"/><circle cx="60" cy="60" r="33" stroke-width="2" stroke-dasharray="5 4"/></g><text x="60" y="66" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="15" font-weight="600" fill="currentColor" transform="rotate(-12 60 60)">VAZIO</text></svg>
+      <h3>${trip ? 'Nada nesta viagem ainda' : f === 'personal' ? 'Nenhum documento pessoal' : 'Comece pelo passaporte'}</h3>
+      <p>${trip ? 'Adicione o visto, as passagens e as reservas. Na fila da embaixada, tudo estará aqui, mesmo sem sinal.' : 'Tire uma foto ou escolha um PDF. Fica guardado só neste aparelho e abre sem internet.'}</p>
+    </div>`;
+  }
+
+  $('#app').innerHTML = h;
+  $('#fab').innerHTML = `<div class="wrap">${trip && docs.length ? `<button class="btn stamp" data-act="present" data-id="${trip.id}">${ICON.present}Apresentar</button>` : ''}<button class="btn primary" data-act="new-doc">${ICON.plus}${trip && docs.length ? "Adicionar" : "Adicionar documento"}</button></div>`;
+}
+
+function tripPanel(t, docs){
+  const list = t.checklist || [], done = list.filter(c => c.done).length;
+  return `<section class="trip" aria-label="Viagem">
+    <h2>${esc(t.name)}</h2>
+    <p class="when">${tripWhen(t) || 'Sem data definida'}${t.start && days(t.start) > 0 ? `, faltam ${days(t.start)} dias` : ''}</p>
+    ${t.notes ? `<p class="when">${esc(t.notes)}</p>` : ''}
+    ${list.length ? `<div class="progress" aria-hidden="true"><i style="width:${done / list.length * 100}%"></i></div>
+    <span class="pcount">${done} de ${list.length} itens prontos</span>` : ''}
+    <ul class="checks">${list.map(c => `<li class="${c.done ? 'done' : ''}">
+      <label><input type="checkbox" data-act="check" data-id="${c.id}" ${c.done ? 'checked' : ''}><span>${esc(c.label)}</span></label>
+      <button class="x" data-act="uncheck-del" data-id="${c.id}" aria-label="Remover ${esc(c.label)}">×</button></li>`).join('')}</ul>
+    <form class="addcheck" data-form="addcheck"><input class="inp" name="label" placeholder="Adicionar item à lista" aria-label="Novo item da lista" autocomplete="off"><button class="btn ghost sm">Adicionar</button></form>
+    <div class="row-btns"><button class="btn ghost sm" data-act="edit-trip" data-id="${t.id}">Editar viagem</button></div>
+  </section>`;
+}
+
+const ICON = {
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  present: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10 18h4"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
+};
+
+/* ---------- Formulário de documento ---------- */
+let draftFiles = [];
+
+function openDocForm(doc){
+  const d = doc || { id:uid(), type:'passport', title:'', holder: store.get('carimbo.holder') || '', number:'', expires:'', tripId: state.trips.some(t => t.id === state.filter) ? state.filter : '', pinned:false, notes:'', files:[] };
+  draftFiles = (d.files || []).slice();
+  const dlg = $('#form');
+  dlg.innerHTML = `<form class="sheet" data-form="doc" data-id="${d.id}">
+    <div class="sheet-h"><h2>${doc ? 'Editar documento' : 'Novo documento'}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
+    <div class="sheet-b">
+      <div class="field"><span>Arquivos</span>
+        <div class="pick">
+          <label class="btn ghost sm"><input type="file" accept="image/*" capture="environment" data-pick>Tirar foto</label>
+          <label class="btn ghost sm"><input type="file" accept="image/*,application/pdf" multiple data-pick>Escolher foto ou PDF</label>
+        </div>
+        <div class="files" id="files"></div>
+      </div>
+      <fieldset class="field" style="border:0;padding:0;margin-inline:0"><legend style="font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Tipo</legend>
+        <div class="types">${ORDER.map(k => `<label style="--tc:${TYPES[k].col}"><input type="radio" name="type" value="${k}" ${d.type === k ? 'checked' : ''}><span>${TYPES[k].l}</span></label>`).join('')}</div>
+      </fieldset>
+      <label class="field"><span>Nome do documento</span><input class="inp" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
+      <label class="field"><span>Número</span><input class="inp mono" name="number" value="${esc(d.number)}" placeholder="FX123456" autocomplete="off" autocapitalize="characters" spellcheck="false"><small>Aparece grande para você ditar ou copiar no balcão.</small></label>
+      <div class="two">
+        <label class="field"><span>Titular</span><input class="inp" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
+        <label class="field"><span>Validade</span><input class="inp" type="date" name="expires" value="${esc(d.expires)}"></label>
+      </div>
+      <label class="field"><span>Viagem</span><select class="inp" name="tripId"><option value="">Pessoal (todas as viagens)</option>${tripsSorted().map(t => `<option value="${t.id}" ${d.tripId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+      <label class="field"><span>Observações</span><textarea class="inp" name="notes" placeholder="Ex.: original fica na pasta azul, levar cópia autenticada">${esc(d.notes)}</textarea></label>
+      <label class="switch"><input type="checkbox" name="pinned" ${d.pinned ? 'checked' : ''}>Mostrar em “À mão”, no topo da tela inicial</label>
+      ${doc ? `<div class="row-btns"><button type="button" class="btn danger sm" data-act="del-doc" data-id="${d.id}">Excluir documento</button></div>` : ''}
+    </div>
+    <div class="sheet-f"><button type="button" class="btn ghost" data-act="close">Cancelar</button><button class="btn primary grow">Salvar documento</button></div>
+  </form>`;
+  drawFiles();
+  dlg.showModal();
+}
+
+function drawFiles(){
+  const el = $('#files'); if (!el) return;
+  el.innerHTML = draftFiles.map((f, i) => `<div class="fthumb">${f.type.startsWith('image/') ? `<img src="${blobUrl(f.blob)}" alt="${esc(f.name)}">` : 'PDF'}<button type="button" data-act="rm-file" data-i="${i}" aria-label="Remover ${esc(f.name)}">×</button></div>`).join('');
+}
+
+async function prepFile(file){
+  if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.type === 'image/svg+xml') return { name:file.name, type:file.type || 'application/octet-stream', blob:file };
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation:'from-image' });
+    const s = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', .88));
+    if (!blob) throw 0;
+    return { name: file.name.replace(/\.\w+$/, '') + '.jpg', type:'image/jpeg', blob };
+  } catch { return { name:file.name, type:file.type, blob:file } }
+}
+
+async function saveDoc(form){
+  const fd = new FormData(form), id = form.dataset.id;
+  const old = state.docs.find(d => d.id === id);
+  const type = fd.get('type') || 'other';
+  const d = {
+    ...(old || { createdAt: Date.now() }),
+    id, type,
+    title: fd.get('title').trim() || TYPES[type].l,
+    number: fd.get('number').trim().toUpperCase(),
+    holder: fd.get('holder').trim(),
+    expires: fd.get('expires'),
+    tripId: fd.get('tripId') || '',
+    notes: fd.get('notes').trim(),
+    pinned: fd.get('pinned') === 'on',
+    files: draftFiles,
+    updatedAt: Date.now(),
+  };
+  if (d.holder) store.set('carimbo.holder', d.holder);
+  try { await dbPut('docs', d) } catch (e) { return toast('Não foi possível salvar: espaço cheio no aparelho') }
+  state.docs = state.docs.filter(x => x.id !== id).concat(d);
+  $('#form').close(); render(); toast(old ? 'Documento atualizado' : 'Documento salvo');
+}
+
+/* ---------- Viagens ---------- */
+function openTripForm(trip){
+  const t = trip || { id:uid(), name:'', start:'', end:'', notes:'', checklist:[] };
+  const dlg = $('#form');
+  dlg.innerHTML = `<form class="sheet" data-form="trip" data-id="${t.id}">
+    <div class="sheet-h"><h2>${trip ? 'Editar viagem' : 'Nova viagem'}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
+    <div class="sheet-b">
+      <label class="field"><span>Destino</span><input class="inp" name="name" value="${esc(t.name)}" placeholder="Ex.: Lisboa" required autocomplete="off"></label>
+      <div class="two">
+        <label class="field"><span>Ida</span><input class="inp" type="date" name="start" value="${esc(t.start)}"></label>
+        <label class="field"><span>Volta</span><input class="inp" type="date" name="end" value="${esc(t.end)}"></label>
+      </div>
+      <label class="field"><span>Observações</span><input class="inp" name="notes" value="${esc(t.notes)}" placeholder="Ex.: entrevista no consulado dia 14, 9h" autocomplete="off"></label>
+      ${trip ? '' : `<label class="switch"><input type="checkbox" name="template" checked>Criar lista de documentos para a embaixada</label>`}
+      ${trip ? `<div class="row-btns"><button type="button" class="btn danger sm" data-act="del-trip" data-id="${t.id}">Excluir viagem</button></div><p style="color:var(--ink-3);font-size:14px">Os documentos da viagem não são apagados: passam para Pessoais.</p>` : ''}
+    </div>
+    <div class="sheet-f"><button type="button" class="btn ghost" data-act="close">Cancelar</button><button class="btn primary grow">${trip ? 'Salvar viagem' : 'Criar viagem'}</button></div>
+  </form>`;
+  dlg.showModal();
+}
+
+async function saveTrip(form){
+  const fd = new FormData(form), id = form.dataset.id, old = state.trips.find(t => t.id === id);
+  const t = { ...(old || { checklist: fd.get('template') === 'on' ? CHECK_TEMPLATE.map(label => ({ id:uid(), label, done:false })) : [] }),
+    id, name: fd.get('name').trim(), start: fd.get('start'), end: fd.get('end'), notes: fd.get('notes').trim() };
+  await dbPut('trips', t);
+  state.trips = state.trips.filter(x => x.id !== id).concat(t);
+  setFilter(id); $('#form').close(); toast(old ? 'Viagem atualizada' : 'Viagem criada');
+}
+
+async function updateTrip(t){ await dbPut('trips', t); state.trips = state.trips.map(x => x.id === t.id ? t : x); render(); }
+
+/* ---------- Visualizador / Modo apresentar ---------- */
+let seq = [], pos = 0, presenting = false, wake = null;
+
+function openViewer(ids, i = 0, present = false){
+  seq = ids; pos = i; presenting = present;
+  drawViewer();
+  const v = $('#viewer'); if (!v.open) v.showModal();
+  if (present && 'wakeLock' in navigator) navigator.wakeLock.request('screen').then(w => wake = w).catch(() => {});
+}
+function closeViewer(){ $('#viewer').close(); }
+$('#viewer').addEventListener('close', () => { if (wake) { wake.release().catch(() => {}); wake = null } $('#viewer').innerHTML = '' });
+
+function drawViewer(){
+  const d = state.docs.find(x => x.id === seq[pos]); if (!d) return closeViewer();
+  const t = TYPES[d.type] || TYPES.other, st = status(d), trip = state.trips.find(x => x.id === d.tripId);
+  const files = d.files || [];
+  $('#viewer').innerHTML = `<div class="v ${presenting ? 'present' : ''}">
+    <div class="v-h"><button class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button><h2>${esc(d.title)}</h2><button class="btn ghost sm" data-act="edit-doc" data-id="${d.id}">Editar</button></div>
+    <div class="v-body">
+      <div class="slides" id="slides">${files.length ? files.map(f => f.type.startsWith('image/')
+        ? `<div class="slide"><img src="${blobUrl(f.blob)}" alt="${esc(d.title)}"></div>`
+        : `<div class="slide"><iframe src="${blobUrl(f.blob)}" title="${esc(f.name)}"></iframe></div>`).join('')
+        : `<div class="slide nofile">Sem arquivo anexado. Toque em Editar para adicionar uma foto ou PDF.</div>`}</div>
+      ${files.length > 1 ? `<div class="dots" id="dots">${files.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
+      <div class="info">
+        ${files.some(f => !f.type.startsWith('image/')) ? `<div class="row-btns" style="margin-top:6px">${files.filter(f => !f.type.startsWith('image/')).map(f => `<a class="btn ghost sm" href="${blobUrl(f.blob)}" target="_blank" rel="noopener" download="${esc(f.name)}">Abrir ${esc(f.name)}</a>`).join('')}</div>` : ''}
+        ${d.number ? `<div class="big-num"><div><small>Número</small><strong>${esc(d.number)}</strong></div><button class="icon-btn" data-act="copy" data-v="${esc(d.number)}" aria-label="Copiar número">${ICON.copy}</button></div>` : ''}
+        <div class="facts">
+          <div class="fact"><small>Tipo</small><b>${t.l}</b></div>
+          ${d.holder ? `<div class="fact"><small>Titular</small><b>${esc(d.holder)}</b></div>` : ''}
+          ${d.expires ? `<div class="fact ${st.k}"><small>Validade</small><b>${fmt(d.expires)}</b></div><div class="fact ${st.k}"><small>Situação</small><b>${st.k === 'ok' ? 'Em dia' : st.t}</b></div>` : ''}
+          ${trip ? `<div class="fact"><small>Viagem</small><b>${esc(trip.name)}</b></div>` : ''}
+          ${d.notes ? `<div class="fact wide"><small>Observações</small><b class="notes">${esc(d.notes)}</b></div>` : ''}
+        </div>
+      </div>
+    </div>
+    ${seq.length > 1 ? `<div class="v-f"><button class="btn ghost sm" data-act="prev" ${pos ? '' : 'disabled'} aria-label="Documento anterior">‹ Anterior</button><span class="count">${pos + 1} de ${seq.length}</span><button class="btn ghost sm" data-act="nextdoc" ${pos < seq.length - 1 ? '' : 'disabled'} aria-label="Próximo documento">Próximo ›</button></div>` : ''}
+  </div>`;
+  const sl = $('#slides'), dots = $('#dots');
+  if (sl && dots) sl.addEventListener('scroll', () => {
+    const i = Math.round(sl.scrollLeft / sl.clientWidth);
+    [...dots.children].forEach((el, j) => el.classList.toggle('on', i === j));
+  }, { passive:true });
+}
+
+/* ---------- Backup ---------- */
+function openSettings(){
+  const dlg = $('#form');
+  dlg.innerHTML = `<div class="sheet settings">
+    <div class="sheet-h"><h2>Backup e ajustes</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
+    <div class="sheet-b">
+      <div class="group"><h3>Seus dados ficam só aqui</h3>
+        <p>Nada é enviado para a internet. Se você trocar ou perder o celular, só o backup recupera os documentos.</p>
+        <p class="meter" id="meter"></p></div>
+      <div class="group"><h3>Fazer backup</h3>
+        <p>Gera um arquivo com todos os documentos e viagens. Guarde em um lugar seguro, como seu e-mail ou nuvem pessoal.</p>
+        <div class="row-btns"><button class="btn primary sm" data-act="export">Baixar backup</button></div></div>
+      <div class="group"><h3>Restaurar backup</h3>
+        <p>Junta os documentos do arquivo com os que já estão aqui.</p>
+        <div class="row-btns"><label class="btn ghost sm" style="cursor:pointer"><input type="file" accept=".json,application/json" data-import class="sr">Escolher arquivo de backup</label></div></div>
+      <div class="group"><h3>Instalar no celular</h3>
+        <p>iPhone: no Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”. Android: no Chrome, toque no menu e em “Instalar app”. Depois disso abre sem internet.</p></div>
+    </div></div>`;
+  dlg.showModal();
+  if (navigator.storage?.estimate) navigator.storage.estimate().then(e => {
+    const mb = n => (n / 1048576).toFixed(1).replace('.', ',') + ' MB';
+    const m = $('#meter'); if (m) m.textContent = `Usando ${mb(e.usage || 0)} de ${mb(e.quota || 0)} disponíveis`;
+  });
+}
+
+const toDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b) });
+
+async function exportAll(){
+  toast('Preparando backup…');
+  const docs = await Promise.all(state.docs.map(async d => ({ ...d, files: await Promise.all((d.files || []).map(async f => ({ name:f.name, type:f.type, data: await toDataURL(f.blob) }))) })));
+  const json = JSON.stringify({ app:'carimbo', version:1, exportedAt:new Date().toISOString(), trips:state.trips, docs });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([json], { type:'application/json' }));
+  a.download = `carimbo-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('Backup baixado');
+}
+
+async function importAll(file){
+  try {
+    const data = JSON.parse(await file.text());
+    if (data.app !== 'carimbo') throw 0;
+    for (const t of data.trips || []) await dbPut('trips', t);
+    for (const d of data.docs || []) {
+      d.files = await Promise.all((d.files || []).map(async f => ({ name:f.name, type:f.type, blob: await (await fetch(f.data)).blob() })));
+      await dbPut('docs', d);
+    }
+    await load(); $('#form').close();
+    toast(`${(data.docs || []).length} documentos restaurados`);
+  } catch { toast('Este arquivo não é um backup do Carimbo') }
+}
+
+/* ---------- Eventos ---------- */
+let toastT;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200) }
+function setFilter(id){ state.filter = id; store.set('carimbo.filter', id); render(); window.scrollTo({ top:0 }) }
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const { act, id } = b.dataset;
+  if (act === 'check') return; // tratado no change
+  switch (act) {
+    case 'filter': setFilter(id); break;
+    case 'new-doc': openDocForm(); break;
+    case 'new-trip': openTripForm(); break;
+    case 'edit-trip': openTripForm(state.trips.find(t => t.id === id)); break;
+    case 'settings': openSettings(); break;
+    case 'export': exportAll(); break;
+    case 'close': { const d = b.closest('dialog'); d.id === 'viewer' ? closeViewer() : d.close(); break }
+    case 'open': {
+      openViewer([id], 0, false); break;
+    }
+    case 'present': {
+      const ids = (id === 'pinned' ? state.docs.filter(d => d.pinned) : state.docs.filter(d => d.tripId === id || (!d.tripId && d.pinned))).sort(sortDocs).map(d => d.id);
+      if (!ids.length) return toast('Adicione documentos primeiro');
+      openViewer(ids, 0, true); break;
+    }
+    case 'prev': if (pos > 0) { pos--; drawViewer() } break;
+    case 'nextdoc': if (pos < seq.length - 1) { pos++; drawViewer() } break;
+    case 'edit-doc': closeViewer(); openDocForm(state.docs.find(d => d.id === id)); break;
+    case 'copy': try { await navigator.clipboard.writeText(b.dataset.v); toast('Número copiado') } catch { toast('Não foi possível copiar') } break;
+    case 'rm-file': draftFiles.splice(+b.dataset.i, 1); drawFiles(); break;
+    case 'del-doc':
+      if (!confirm('Excluir este documento e os arquivos dele? Isso não pode ser desfeito.')) return;
+      await dbDel('docs', id); state.docs = state.docs.filter(d => d.id !== id); $('#form').close(); render(); toast('Documento excluído'); break;
+    case 'del-trip': {
+      if (!confirm('Excluir esta viagem? Os documentos dela passam para Pessoais.')) return;
+      for (const d of state.docs.filter(d => d.tripId === id)) { d.tripId = ''; await dbPut('docs', d) }
+      await dbDel('trips', id); state.trips = state.trips.filter(t => t.id !== id);
+      $('#form').close(); setFilter('all'); toast('Viagem excluída'); break;
+    }
+    case 'uncheck-del': {
+      const t = state.trips.find(t => t.id === state.filter); if (!t) return;
+      t.checklist = t.checklist.filter(c => c.id !== id); updateTrip(t); break;
+    }
+  }
+});
+
+document.addEventListener('change', async e => {
+  const el = e.target;
+  if (el.matches('[data-act=check]')) {
+    const t = state.trips.find(t => t.id === state.filter); if (!t) return;
+    const c = t.checklist.find(c => c.id === el.dataset.id); c.done = el.checked; updateTrip(t);
+  }
+  if (el.matches('[data-pick]')) {
+    for (const f of el.files) draftFiles.push(await prepFile(f));
+    el.value = ''; drawFiles();
+  }
+  if (el.matches('[data-import]') && el.files[0]) importAll(el.files[0]);
+  if (el.matches('[name=type]')) { const ti = el.form.title; ti.placeholder = TYPES[el.value].l }
+});
+
+document.addEventListener('submit', e => {
+  const f = e.target; e.preventDefault();
+  if (f.dataset.form === 'doc') saveDoc(f);
+  if (f.dataset.form === 'trip') saveTrip(f);
+  if (f.dataset.form === 'addcheck') {
+    const label = f.label.value.trim(), t = state.trips.find(t => t.id === state.filter);
+    if (!label || !t) return;
+    t.checklist = (t.checklist || []).concat({ id:uid(), label, done:false });
+    updateTrip(t).then(() => document.querySelector('[data-form=addcheck] input')?.focus());
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (!$('#viewer').open) return;
+  if (e.key === 'ArrowRight' && pos < seq.length - 1) { pos++; drawViewer() }
+  if (e.key === 'ArrowLeft' && pos > 0) { pos--; drawViewer() }
+});
+
+/* ---------- Faixa de segurança (guilhoché) ---------- */
+(function(){
+  const W = 600, H = 46; let p = '';
+  for (let k = 0; k < 12; k++) {
+    let d = '';
+    for (let x = 0; x <= W; x += 4) {
+      const y = H/2 + Math.sin(x/34 + k*.52) * 15 * Math.cos(x/170 + k*.18) + Math.sin(x/9 + k) * 1.6;
+      d += (x ? 'L' : 'M') + x + ' ' + y.toFixed(1);
+    }
+    p += `<path d="${d}"/>`;
+  }
+  $('#guil').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width=".8">${p}</g></svg>`;
+})();
+
+/* ---------- Início ---------- */
+async function load(){
+  [state.docs, state.trips] = await Promise.all([dbAll('docs'), dbAll('trips')]);
+  render();
+}
+load().catch(() => { $('#app').innerHTML = '<div class="empty"><h3>Armazenamento indisponível</h3><p>Abra o Carimbo fora da janela anônima para guardar documentos neste aparelho.</p></div>' });
+if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
