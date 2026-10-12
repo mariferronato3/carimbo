@@ -210,6 +210,15 @@ function findDates(text){
   while ((m = r3.exec(text))) { const mo = MONTH[m[2].slice(0, 3).toLowerCase()]; if (mo) push(iso(+m[3], mo, +m[1]), m.index) }
   const r4 = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/g;
   while ((m = r4.exec(text))) { const mo = MONTH[m[1].slice(0, 3).toLowerCase()]; if (mo) push(iso(+m[3], mo, +m[2]), m.index) }
+  // sem ano: "30 de out." / "30 out" → próxima ocorrência
+  const r6 = /\b(\d{1,2})\s+(?:de\s+)?([A-Za-zçÇ]{3,9})\.?(?!\s*(?:de\s+)?,?\s*\d{4})(?![A-Za-z])/g;
+  while ((m = r6.exec(text))) {
+    const mo = MONTH[m[2].slice(0, 3).toLowerCase()]; if (!mo) continue;
+    const y = new Date().getFullYear();
+    let d = iso(y, mo, +m[1]);
+    if (d && new Date(d) < new Date(Date.now() - 864e5 * 30)) d = iso(y + 1, mo, +m[1]);
+    push(d, m.index);
+  }
   // formato de companhia aérea: 12NOV, 12NOV26, 02Nov2026
   const r5 = /\b(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{4}|\d{2})?\b/gi;
   while ((m = r5.exec(text))) {
@@ -235,12 +244,16 @@ function parseLegs(T){
       const t = (seg.slice(d.i, d.i + 30).match(/^\S+(?:\s\S+){0,2}?\s+(\d{1,2}[:h]\d{2})\b/) || [])[1] || (seg.slice(Math.max(0, d.i - 14), d.i).match(/(\d{1,2}[:h]\d{2})\s*$/) || [])[1];
       return t ? `${d.date}T${t.replace(/h/i, ':').padStart(5, '0')}` : d.date;
     };
+    // Formato de e-mail (Booking etc.): a data vem na linha antes do trecho e os horários soltos dentro dele
+    const dPrev = findDates(T.slice(Math.max(0, m.index - 90), m.index)).pop();
+    const times = [...seg.matchAll(/\b(\d{1,2}):(\d{2})\b/g)].map(x => x[1].padStart(2, '0') + ':' + x[2]);
+    const nextDay = d => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10) };
     const clean = c => titleCase(c.replace(/^(?:leg\s+\d+\s+of\s+\d+\s*\|?\s*|de\s+|from\s+|\|\s*)/i, '').trim());
     return {
       from: clean(m[1]), fromCode: m[2], to: clean(m[3]), toCode: m[4],
-      flight: ((seg.match(/\b(?:flight|voo|vuelo)\b[^\n]{0,10}\n?\s*([A-Z0-9]{2}\s?\d{2,4})\b/i) || [])[1] || '').toUpperCase(),
-      dep: at(/(departure|partida|sa[íi]da|decolagem)[\s\S]*$/i),
-      arr: at(/(arrival|chegada|llegada)[\s\S]*$/i),
+      flight: ((seg.match(/\b(?:flight|voo|vuelo)\b[^\n]{0,10}\n?\s*([A-Z0-9]{2}\s?\d{2,4})\b/i) || [])[1] || (seg.match(AIRLINE_CODE) || []).slice(1, 3).join(' ') || '').toUpperCase(),
+      dep: at(/(departure|partida|sa[íi]da|decolagem)[\s\S]*$/i) || (dPrev && times[0] ? `${dPrev.date}T${times[0]}` : ''),
+      arr: at(/(arrival|chegada|llegada)[\s\S]*$/i) || (dPrev && times[1] ? `${times[1] < times[0] ? nextDay(dPrev.date) : dPrev.date}T${times[1]}` : ''),
       terminal: (seg.match(/terminal\s*[:\-]?\s*([A-Z0-9]{1,3})\b/i) || [])[1] || '',
       seat: (seg.match(/(?:seat|assento|poltrona)\s*[:\-]?\s*(\d{1,2}[A-K])\b/i) || [])[1] || '',
     };
@@ -264,8 +277,8 @@ const CLUES = {
   passport:  [[/passaporte|passport|pasaporte/i, 3]],
   visa:      [[/\bvisto\b|\bvisa\b(?!\s*(card|cart[ãa]o|electron|infinite|platinum|gold|signature))|schengen|consulado|consulate/i, 3]],
   id:        [[/carteira\s+de\s+identidade|registro\s+geral|habilita[çc][ãa]o|\bCNH\b|\bRG\b|identity\s+card/i, 4]],
-  ticket:    [[/cart[ãa]o\s+de\s+embarque|boarding\s+pass|e-?ticket|bilhete\s+eletr[ôo]nico|ticket\s+(?:number|&\s*receipt)|booking\s+reference|passenger\s+name|conditions\s+of\s+carriage|operated\s+by|itinerary|itiner[áa]rio\s+de\s+voo|localizador/i, 6], [/\bvoo\b|flight|aeroporto|airport|airlines?|companhia\s+a[ée]rea/i, 2], [/port[ãa]o|\bgate\b|assento|poltrona|\bseat\b|bagagem|baggage/i, 1], [/\([A-Z]{3}\)/, 1]],
-  stay:      [[/check-?out/i, 3], [/check-?in(?!\s+(?:at\s+the\s+airport|online|points|desk|counter|no\s+aeroporto))/i, 1], [/hotel|pousada|hostel|hospedagem|accommodation|acomoda[çc][ãa]o|booking\.com|airbnb|h[óo]spede|\bguest\b|noites|nights|quarto|room/i, 2]],
+  ticket:    [[/reserva\s+de\s+voo|booking\.com\s+(?:voos|flights)|flight\s+booking|voo\s+de\s+(?:ida|volta)|bagagem\s+de\s+m[ãa]o|cabin\s+bag|personal\s+item|\bescalas?\b|conex[ãa]o|layover|voo\s+direto|direct\s+flight|operado\s+por|localizador\s+da\s+companhia/i, 4], [/cart[ãa]o\s+de\s+embarque|boarding\s+pass|e-?ticket|bilhete\s+eletr[ôo]nico|ticket\s+(?:number|&\s*receipt)|booking\s+reference|passenger\s+name|conditions\s+of\s+carriage|operated\s+by|itinerary|itiner[áa]rio\s+de\s+voo|localizador/i, 6], [/\bvoo\b|flight|aeroporto|airport|airlines?|companhia\s+a[ée]rea/i, 2], [/port[ãa]o|\bgate\b|assento|poltrona|\bseat\b|bagagem|baggage/i, 1], [/\([A-Z]{3}\)/, 1]],
+  stay:      [[/check-?out/i, 3], [/check-?in(?!\s+(?:at\s+the\s+airport|online|points|desk|counter|no\s+aeroporto))/i, 1], [/hotel|pousada|hostel|hospedagem|accommodation|acomoda[çc][ãa]o|airbnb|h[óo]spede|\bguest\b|noites|nights|quarto|room/i, 2]],
   tour:      [[/getyourguide|get your guide|viator|civitatis|klook|tiqets|musement|headout|guruwalk|sandemans/i, 6], [/\btour\b|passeio|excurs[ãa]o|excursion|ingresso|admission|ponto\s+de\s+encontro|meeting\s+point|atividade|activity|experi[êe]ncia/i, 2]],
   insurance: [[/seguro\s+viagem|travel\s+insurance|ap[óo]lice|policy\s+number|assist[êe]ncia\s+(?:em\s+)?viagem|assist\s+card|affinity|travel\s+ace/i, 5], [/seguro|insurance|cobertura|coverage|segurado|insured/i, 2]],
   health:    [[/vacina|vacina[çc][ãa]o|vaccin|imuniza[çc][ãa]o|febre\s+amarela|yellow\s+fever|certificado\s+internacional/i, 5], [/exame|laudo|m[ée]dic[oa]|receita|sa[úu]de|health/i, 1]],
@@ -273,14 +286,18 @@ const CLUES = {
 };
 function classify(text, mrz){
   if (mrz) return mrz.kind === 'V' ? 'visa' : mrz.kind === 'I' ? 'id' : 'passport';
+  // dois ou mais aeroportos conhecidos no texto: quase certamente é voo
+  const ports = new Set([...text.matchAll(/(?:\(|\b)([A-Z]{3})(?:\)|\b)/g)].map(m => m[1]).filter(c => AIRPORTS.has(c)));
   let best = 'other', top = 1;
   for (const [type, rules] of Object.entries(CLUES)) {
-    const score = rules.reduce((n, [re, w]) => n + (re.test(text) ? w : 0), 0);
+    const score = rules.reduce((n, [re, w]) => n + (re.test(text) ? w : 0), 0) + (type === 'ticket' && ports.size >= 2 ? 5 : 0);
     if (score > top) { best = type; top = score }
   }
   return best;
 }
 
+// Códigos de companhias aéreas conhecidas + número do voo
+const AIRLINE_CODE = /\b(LA|JJ|G3|AD|TP|EK|QR|AF|KL|IB|AA|UA|DL|LH|BA|CM|AV|AR|TK|UX|AZ|LX|FR|U2|VY|JA|AC|ET|AT|VN|VJ|TG|SQ|CX|JL|NH|KE|EY|AK|FD|QF|BR|CI|MH|PR|JQ|TR|AM|H2|DM|DY|SK|AY|EI|VS|WN|B6|DE|EW|HV|SN|OS|LO|A3|PC|SV|WY|MS|SA|2Z|O6|P3|XL)\s?(\d{1,4})\b(?![:h]\d)/;
 const AIRPORTS = new Set(('GRU CGH VCP GIG SDU BSB CNF SSA REC FOR POA CWB FLN NAT MCZ BEL MAO IGU VIX GYN CGB AJU JPA THE SLZ PMW BPS NVT ' +
   'LIS OPO FAO FNC PDL MAD BCN AGP PMI SVQ VLC BIO IBZ CDG ORY NCE LYS MRS LHR LGW STN LTN MAN EDI DUB FCO MXP LIN VCE NAP BLQ FLR PSA CTA ' +
   'AMS BRU FRA MUC BER DUS HAM ZRH GVA VIE PRG BUD WAW KRK CPH ARN OSL HEL ATH IST SAW AYT KEF ' +
@@ -296,7 +313,7 @@ function holderFrom(text){
     const giv = sl[2].trim().replace(/\s*(MISS|MRS|MSTR|MR|MS)$/i, '').replace(/(MISS|MRS|MSTR)$/i, '');
     return titleCase(`${giv} ${sl[1].trim()}`);
   }
-  const raw = grab(text, /(?:nome\s+do\s+(?:passageiro|segurado|h[óo]spede|titular)|passageiro|passenger(?:\s+name)?|segurado|insured(?:\s+name)?|guest(?:\s+name)?|h[óo]spede|titular|nome(?:\s+civil)?|name)\s*[:\-]?\s*\n?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ'´\/ ]{4,48})/i);
+  const raw = grab(text, /(?:nome\s+do\s+(?:passageiro|segurado|h[óo]spede|titular)|passageiro|viajantes?|travell?ers?|passenger(?:\s+name)?|segurado|insured(?:\s+name)?|guest(?:\s+name)?|h[óo]spede|titular|nome(?:\s+civil)?|name)\s*[:\-]?\s*\n?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ'´\/ ]{4,48})/i);
   if (!raw) return '';
   let s = raw.split(/\s{2,}|\n/)[0];
   // Formato de companhia aérea: "Sobrenome Nome Ms" → o nome é a última palavra antes do Ms/Mr
@@ -322,7 +339,10 @@ function fromText(type, text){
   }
   switch (type) {
     case 'ticket': {
-      r.number = grab(T, /(?:localizador|c[óo]digo\s+(?:de\s+)?(?:reserva|confirma[çc][ãa]o)|booking\s+(?:reference|code|ref\.?)|record\s+locator|reservation\s+(?:code|number)|confirmation\s+(?:code|number)|pnr|reserva)\s*(?:n[º°o.]*)?\s*[:#\-]?\s*\n?\s*([A-Z0-9]{6})\b/i, upperCode);
+      r.number = grab(T, /(?:localizador\s+da\s+(?:companhia|cia)(?:\s+a[ée]rea)?|c[óo]digo\s+(?:de\s+reserva\s+)?da\s+(?:companhia|cia)(?:\s+a[ée]rea)?|airline\s+(?:reference|booking\s+(?:reference|code)|confirmation(?:\s+code)?|locator|pnr)|refer[êe]ncia\s+da\s+companhia(?:\s+a[ée]rea)?)\s*(?:\([^)]*\))?\s*[:#\-]?\s*\n?\s*([A-Z0-9]{6})\b/i, upperCode)
+        || grab(T, /(?:localizador|c[óo]digo\s+(?:de\s+)?(?:reserva|confirma[çc][ãa]o)|booking\s+(?:reference|code|ref\.?)|record\s+locator|reservation\s+(?:code|number)|confirmation\s+(?:code|number)|pnr|reserva)\s*(?:n[º°o.]*)?\s*[:#\-]?\s*\n?\s*([A-Z0-9]{6})\b/i, upperCode);
+      const agencyRef = grab(T, /(?:refer[êe]ncia\s+da\s+reserva|n[úu]mero\s+da\s+reserva|n[º°o.]\s*da\s+reserva|booking\s+(?:reference|number|id)|order\s+(?:number|id)|n[úu]mero\s+do\s+pedido)\s*[:#]?\s*\n?\s*(\d[\d\-\s]{5,18}\d)\b/i).replace(/\s+/g, '');
+      if (!r.number && agencyRef) r.number = agencyRef;
       const codes = [...T.matchAll(/\(([A-Z]{3})\)/g)].map(m => m[1]).filter(c => !NOT_AIRPORT.has(c));
       let [org, dst] = [...new Set(codes)], short = '';
       // Códigos soltos só valem se forem aeroportos conhecidos (evita "NON para END")
@@ -341,12 +361,13 @@ function fromText(type, text){
       X.flight = grab(T, /\b(?:voo|flight|vuelo)\s*(?:n[º°o.]*)?\s*:?\s*([A-Z0-9]{2}\s?\d{2,4})\b/i).toUpperCase().replace(/\s+/, ' ');
       // Voo numa tabela, logo antes do horário: "VN610 12:20"
       if (!X.flight) { const m = T.match(/\b([A-Z]{2}|[A-Z]\d|\d[A-Z])\s?(\d{2,4})\s+\d{1,2}:\d{2}\b/); if (m) X.flight = `${m[1]} ${m[2]}` }
+      if (!X.flight) { const m = T.match(AIRLINE_CODE); if (m) X.flight = `${m[1]} ${m[2]}` }
       X.seat = grab(T, /(?:assento|poltrona|seat|asiento)\s*(?:n[º°o.]*)?\s*[:\-]?\s*(\d{1,2}\s?[A-K])\b/i).replace(/\s/, '').toUpperCase();
       X.group = grab(T, /(?:grupo(?:\s+de\s+embarque)?|boarding\s+group|group|zona|zone)\s*[:\-]?\s*([A-Z0-9]{1,2})\b/i).toUpperCase();
       X.gate = grab(T, /(?:port[ãa]o(?:\s+de\s+embarque)?|gate|puerta)\s*[:\-]?\s*([A-Z]?\d{1,3}[A-Z]?)\b/i).toUpperCase();
       // dia do voo: a 1ª data com horário colado (antes ou depois); ignora a data de emissão do bilhete
       const timeBefore = d => (T.slice(Math.max(0, d.i - 14), d.i).match(/(\d{1,2}[:h]\d{2})\s*$/) || [])[1];
-      const timeNext = d => (T.slice(d.i, d.i + 30).match(/^\S+(?:\s\S+){0,2}?\s+(\d{1,2}[:h]\d{2})\b/) || [])[1];
+      const timeNext = d => (T.slice(d.i, d.i + 40).match(/^\S+(?:\s\S+){0,4}?\s+(\d{1,2}[:h]\d{2})\b/) || [])[1];
       const flightDay = fut.find(d => timeBefore(d) || timeNext(d)) || fut.find(d => !/emiss|issu|date:\s*$/i.test(d.ctx.slice(-25))) || fut[0];
       const day = flightDay?.date;
       // decolagem: rótulo explícito, ou a hora colada na data do voo
@@ -364,7 +385,9 @@ function fromText(type, text){
       const bag = grab(T, /(?:free\s+checked\s+baggage|checked\s+bag(?:gage)?|baggage\s+allowance|franquia\s+de\s+bagagem|bagagem\s+despachada|bagagem|baggage)\s*[:\-]?\s*(\d+\s*(?:PC|pe[çc]as?|pieces?|kg|x\s*\d+\s*kg)?)/i);
       if (bag) X.baggage = bag.replace(/(\d+)\s*(PC|pieces?|pe[çc]as?)/i, (_, n) => `${n} ${+n === 1 ? 'peça' : 'peças'}`);
       X.eticket = grab(T, /(?:ticket\s+(?:number|no\.?)|n[úu]mero\s+do\s+bilhete|e-?ticket\s*(?:n[º°o.]*)?)\s*[:\-]?\s*(\d{3}[\s-]?\d{10})\b/i);
-      const dur = grab(T, /(?:dura[çc][ãa]o|duration)\s*[:\-]?\s*(\d{1,2}[:h]\d{2})/i); if (dur) { const [h, m] = dur.split(/[:h]/i); r.notes = `Duração do voo: ${+h}h${m}` }
+      const dur = grab(T, /(?:dura[çc][ãa]o|duration)\s*[:\-]?\s*(\d{1,2}[:h]\d{2})/i);       if (dur) { const [h, m] = dur.split(/[:h]/i); r.notes = `Duração do voo: ${+h}h${m}` }
+      const agency = /booking\.com/i.test(T) ? 'Booking.com' : /decolar/i.test(T) ? 'Decolar' : /expedia/i.test(T) ? 'Expedia' : /kiwi\.com/i.test(T) ? 'Kiwi.com' : /gotogate|mytrip|flightnetwork/i.test(T) ? 'agência' : '';
+      if (agencyRef && agencyRef !== r.number) r.notes = [r.notes, `Reserva ${agency ? 'na ' + agency : 'da agência'}: ${agencyRef}`].filter(Boolean).join('\n');
       const legs = parseLegs(T);
       if (legs.length > 1) {
         const now = new Date().toISOString().slice(0, 16);
@@ -495,6 +518,39 @@ function fromText(type, text){
   return r;
 }
 
+/* ---------- E-mails e texto ---------- */
+function htmlText(html){
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script,style,head').forEach(n => n.remove());
+  doc.querySelectorAll('br,p,div,tr,li,h1,h2,h3,h4,td').forEach(n => n.append('\n'));
+  return (doc.body?.textContent || '').replace(/[ \t\u00a0]+/g, ' ').replace(/\n\s*\n+/g, '\n');
+}
+// Arquivo .eml: pega as partes de texto, decodificando base64 e quoted-printable
+function emlText(raw){
+  const parts = raw.split(/\r?\n--[^\r\n]+\r?\n/);
+  let html = '', plain = '';
+  for (const p of parts.length > 1 ? parts : [raw]) {
+    const [head, ...rest] = p.split(/\r?\n\r?\n/); let body = rest.join('\n\n');
+    const type = (head.match(/content-type:\s*([^;\s]+)/i) || [])[1] || '';
+    const cte = (head.match(/content-transfer-encoding:\s*([^\s;]+)/i) || [])[1] || '';
+    const cs = (head.match(/charset="?([^";\s]+)/i) || [])[1] || 'utf-8';
+    if (!/text\/(html|plain)/i.test(type)) continue;
+    let bytes;
+    if (/base64/i.test(cte)) bytes = Uint8Array.from(atob(body.replace(/[^A-Za-z0-9+/=]/g, '')), c => c.charCodeAt(0));
+    else if (/quoted-printable/i.test(cte)) { body = body.replace(/=\r?\n/g, ''); bytes = Uint8Array.from((body.match(/=[0-9A-F]{2}|[\s\S]/gi) || []).map(t => t.length === 3 ? parseInt(t.slice(1), 16) : t.charCodeAt(0) & 255)) }
+    else bytes = new TextEncoder().encode(body);
+    let text; try { text = new TextDecoder(cs).decode(bytes) } catch { text = new TextDecoder().decode(bytes) }
+    if (/html/i.test(type)) html += text; else plain += text;
+  }
+  return html ? htmlText(html) : plain || raw;
+}
+async function fileText(f){
+  const raw = await f.blob.text();
+  if (/rfc822/i.test(f.type) || /\.eml$/i.test(f.name)) return emlText(raw);
+  if (/html/i.test(f.type) || /\.html?$/i.test(f.name)) return htmlText(raw);
+  return raw;
+}
+
 /* ---------- Ponto de entrada ---------- */
 async function openPdf(file){
   const lib = await pdfjs();
@@ -542,6 +598,7 @@ async function read(files, forcedType, status = () => {}){
       t = await pdfText(pdf);
       pages = Array.from({ length: Math.min(pdf.numPages, 3) }, (_, i) => () => renderPage(pdf, i + 1));
     } else if (f.type.startsWith('image/')) pages = [() => f.blob];
+    else { status('Lendo o e-mail…'); t = await fileText(f) }
     const hasText = t.replace(/\s/g, '').length > 40;
     if (!mrz && hasText) mrz = parseMRZ(t);
     // Só procura a faixa MRZ nas imagens quando parece documento pessoal (ou ainda não dá para saber)

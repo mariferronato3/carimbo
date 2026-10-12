@@ -62,6 +62,8 @@ button{cursor:pointer}
 .who-b{border:0;background:transparent;height:36px;padding:0 16px;border-radius:999px;font-weight:600;font-size:15px;color:var(--ink-2)}
 .who-b[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(14,31,58,.18)}
 .tag.who-t{background:var(--ink);color:var(--paper)}
+.alert.risk .row-btns{margin-top:10px}
+.alert.risk{margin-top:16px}
 .syncline{display:block;background:none;border:0;padding:6px 0 0;margin:0;font-size:14px;font-weight:600;color:var(--stamp);text-align:left}
 .syncline.err{color:var(--bad)}
 .next{margin:14px 0 0;font-size:15px;color:var(--ink-2)}
@@ -200,6 +202,8 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .kinds{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .kind{min-height:64px;border-radius:16px;border:1px solid var(--line);background:var(--card);text-align:left;padding:12px 14px;font-weight:600;font-size:16px;line-height:1.2;display:flex;align-items:center;gap:10px}
 .kind:active{background:var(--sunk)}
+.more-add{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 18px}
+.more-add .link-plain{margin:4px 0 0}
 .link-plain{display:block;background:none;border:0;color:var(--stamp);font-weight:600;padding:14px 0 4px;margin:4px auto 0}
 .reading{text-align:center;padding:28px 8px 20px}
 .reading svg{width:112px;height:112px;color:var(--stamp)}
@@ -314,7 +318,7 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 </header>
 
 <main id="app" class="wrap" aria-live="polite"></main>
-<input type="file" id="addfile" accept="image/*,application/pdf" multiple class="sr" tabindex="-1" aria-hidden="true">
+<input type="file" id="addfile" accept="image/*,application/pdf,.eml,message/rfc822,.html,.htm,text/html,.txt,text/plain" multiple class="sr" tabindex="-1" aria-hidden="true">
 
 <div class="fab" id="fab"></div>
 
@@ -475,6 +479,24 @@ function tripWhen(t){
   return b ? `${a} a ${b}` : a;
 }
 
+const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let persisted = null;
+navigator.storage?.persisted?.().then(v => { persisted = v; render() }).catch(() => {});
+function riskNote(){
+  const st = window.Sync?.state || {};
+  if (st.signedIn && st.unlocked) return '';            // sincronizado: está seguro
+  if (!state.docs.length) return '';
+  const how = isIOS ? 'No Safari, toque em Compartilhar e em “Adicionar à Tela de Início”, e use sempre pelo ícone.'
+    : 'No Chrome, toque no menu ⋮ e em “Instalar app” (ou “Adicionar à tela inicial”), e use sempre pelo ícone.';
+  if (!installed()) return `<div class="alert bad risk" role="alert"><strong>Seus documentos podem sumir</strong>
+    Eles estão só neste navegador, que pode apagá-los (pouco espaço, limpeza de dados${isIOS ? ', 7 dias sem abrir' : ''}). ${how}
+    <div class="row-btns"><button class="btn sm stamp" data-act="settings">Ativar sincronização</button><button class="btn sm ghost" data-act="export">Baixar backup</button></div></div>`;
+  if (persisted === false) return `<div class="alert risk" role="alert"><strong>Seus documentos estão só neste aparelho</strong>
+    Se o celular ficar sem espaço ou os dados do navegador forem limpos, eles se perdem. Ative a sincronização para ter uma cópia segura.
+    <div class="row-btns"><button class="btn sm stamp" data-act="settings">Ativar sincronização</button></div></div>`;
+  return '';
+}
 function renderSyncLine(){
   const el = $('#syncline'); if (!el || !window.Sync) return;
   const st = Sync.state;
@@ -560,6 +582,7 @@ function render(){
     <button class="chip add" data-act="new-trip">+ Nova viagem</button>
   </nav>`;
 
+  h += riskNote();
   if (trip) h += tripPanel(trip, docs);
 
   if (f === 'all') {
@@ -583,12 +606,13 @@ function render(){
       const group = docs.filter(d => d.type === k);
       return `<section class="group" style="--tc:${TYPES[k].col}"><h2 class="sec"><span class="gi">${typeIcon(k)}</span>${TYPES[k].l}<small>${group.length}</small></h2><div class="list">${group.map(docCard).join('')}</div></section>`;
     }).join('');
-    h += `<button class="link-plain" data-act="kind-blank">Adicionar sem arquivo, preenchendo à mão</button>`;
+    h += `<div class="more-add"><button class="link-plain" data-act="paste">Colar texto de um e-mail</button><button class="link-plain" data-act="kind-blank">Preencher à mão</button></div>`;
   } else {
     h += `<div class="empty">
       <svg viewBox="0 0 120 120" aria-hidden="true"><g transform="rotate(-12 60 60)" fill="none" stroke="currentColor"><circle cx="60" cy="60" r="44" stroke-width="5"/><circle cx="60" cy="60" r="33" stroke-width="2" stroke-dasharray="5 4"/></g><text x="60" y="66" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="15" font-weight="600" fill="currentColor" transform="rotate(-12 60 60)">VAZIO</text></svg>
       <h3>${trip ? 'Nada nesta viagem ainda' : f === 'personal' ? 'Nada em Meus documentos' : 'Comece pelo passaporte'}</h3>
       <p>${trip ? 'Adicione o visto, as passagens e as reservas. Na fila da embaixada, tudo estará aqui, mesmo sem sinal.' : 'Toque em Adicionar documento e tire uma foto ou escolha o PDF. O Carimbo descobre o que é e preenche tudo. Fica só neste aparelho e abre sem internet.'}</p>
+      <div class="more-add"><button class="link-plain" data-act="paste">Colar texto de um e-mail</button><button class="link-plain" data-act="kind-blank">Preencher à mão</button></div>
     </div>`;
   }
 
@@ -913,11 +937,12 @@ function drawViewer(){
       ${bv ? `<div class="info top"><div class="big-num"><div><small>${bf[1]}</small><strong>${esc(bv)}</strong></div><button class="icon-btn" data-act="copy" data-v="${esc(bv)}" aria-label="Copiar ${bf[1].toLowerCase()}">${ICON.copy}</button></div></div>` : ''}
       <div class="slides" id="slides">${files.length ? files.map(f => f.type.startsWith('image/')
         ? `<div class="slide"><img src="${blobUrl(f.blob)}" alt="${esc(d.title)}"></div>`
+        : f.type !== 'application/pdf' ? `<div class="slide nofile">E-mail guardado. Os dados lidos estão acima.</div>`
         : `<a class="slide pdfpage" href="${blobUrl(f.blob)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(f.name)} completo"><img data-pdf="${files.indexOf(f)}" alt="Primeira página de ${esc(d.title)}"></a>`).join('')
         : `<div class="slide nofile">Sem arquivo anexado. Toque em Editar para adicionar uma foto ou PDF.</div>`}</div>
       ${files.length > 1 ? `<div class="dots" id="dots">${files.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
       <div class="info">
-        ${files.some(f => !f.type.startsWith('image/')) ? `<div class="row-btns" style="margin-top:6px">${files.filter(f => !f.type.startsWith('image/')).map(f => `<a class="btn ghost sm" href="${blobUrl(f.blob)}" target="_blank" rel="noopener" download="${esc(f.name)}">Abrir o PDF completo</a>`).join('')}</div>` : ''}
+        ${files.some(f => f.type === 'application/pdf') ? `<div class="row-btns" style="margin-top:6px">${files.filter(f => f.type === 'application/pdf').map(f => `<a class="btn ghost sm" href="${blobUrl(f.blob)}" target="_blank" rel="noopener" download="${esc(f.name)}">Abrir o PDF completo</a>`).join('')}</div>` : ''}
         <div class="facts">
           ${fieldsOf(d.type).filter(f => f !== bf && fval(d, f[0])).map(([k, l, kind]) => `<div class="fact${kind === 'wide' || kind === 'tel' ? ' wide' : ''}${k === 'expires' && st ? ' ' + st.k : ''}"><small>${l}</small><b>${kind === 'tel' ? `<a href="tel:${esc(fval(d, k).replace(/[^\d+]/g, ''))}">${esc(fval(d, k))}</a>` : esc(fshow(kind, fval(d, k)))}</b></div>`).join('')}
           ${st && st.k !== 'ok' ? `<div class="fact ${st.k}"><small>Situação</small><b>${st.t}</b></div>` : ''}
@@ -980,7 +1005,7 @@ function renderSync(msg = ''){
     <div class="row-btns"><button class="btn primary sm" data-act="sync-now">Sincronizar agora</button><button class="btn ghost sm" data-act="sync-out">Sair deste aparelho</button></div>`;
 }
 // não redesenha enquanto a pessoa digita no bloco
-Sync.on(() => renderSyncLine());
+Sync.on(() => { renderSyncLine(); if (!$('dialog[open]')) render() });
 Sync.on(() => { if (!document.activeElement?.closest('#syncbox')) renderSync() });
 
 async function syncAction(act, btn){
@@ -1088,6 +1113,14 @@ document.addEventListener('click', async e => {
     case 'filter': setFilter(id); break;
     case 'person': state.person = id; store.set('carimbo.person', id); render(); window.scrollTo({ top: 0 }); break;
     case 'new-doc': addDoc(); break;
+    case 'paste': {
+      const dlg = $('#form');
+      dlg.innerHTML = `<form class="sheet" data-form="paste"><div class="sheet-h"><h2>Colar texto de um e-mail</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
+        <div class="sheet-b"><p class="lead">No e-mail da reserva (Booking, companhia aérea, hotel…), selecione tudo, copie e cole aqui. O Carimbo lê e preenche.</p>
+        <textarea class="inp" name="text" rows="10" placeholder="Cole aqui o texto do e-mail" required></textarea></div>
+        <div class="sheet-f"><button type="button" class="btn ghost" data-act="close">Cancelar</button><button class="btn primary grow">Ler texto</button></div></form>`;
+      dlg.showModal(); break;
+    }
     case 'kind-blank': openDocForm(null); break;
     case 'skip-read': readToken++; skipExisting ? openDocForm(skipExisting) : openDocForm(null, { type: 'other', files: skipFiles, filled: [], x: {}, skipped: true }); break;
     case 'new-trip': openTripForm(); break;
@@ -1152,6 +1185,7 @@ document.addEventListener('change', async e => {
 document.addEventListener('submit', e => {
   const f = e.target; e.preventDefault();
   if (f.dataset.form === 'doc') saveDoc(f);
+  if (f.dataset.form === 'paste') { const t = f.text.value.trim(); if (t) readNewDoc([new File([t], 'email.txt', { type: 'text/plain' })]) }
   if (f.dataset.form === 'trip') saveTrip(f);
   if (f.dataset.form === 'addcheck') {
     const label = f.label.value.trim(), t = state.trips.find(t => t.id === state.filter);
@@ -1188,7 +1222,8 @@ async function load(){
   render();
 }
 load().then(() => { Sync.init(); autoTripsForOld().catch(() => {}) }).catch(() => { $('#app').innerHTML = '<div class="empty"><h3>Armazenamento indisponível</h3><p>Abra o Carimbo fora da janela anônima para guardar documentos neste aparelho.</p></div>' });
-if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+if (navigator.storage?.persist) navigator.storage.persist().then(v => { persisted = v; render() }).catch(() => {});
+addEventListener('appinstalled', () => navigator.storage?.persist?.().then(v => { persisted = v; render() }));
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   const hadSW = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').catch(() => {});
