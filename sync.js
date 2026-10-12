@@ -34,12 +34,15 @@ async function deriveKey(pass, salt){
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 async function seal(obj){
+  // Entrar com Google: sem senha, os arquivos ficam protegidos pelas regras de acesso do Supabase
+  if (key === 'plain') return new Blob([JSON.stringify(obj)], { type: 'application/json' });
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(obj))));
   const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
   return new Blob([out], { type: 'application/octet-stream' });
 }
 async function unseal(blob){
+  if (key === 'plain') return JSON.parse(await blob.text());
   const b = new Uint8Array(await blob.arrayBuffer());
   return JSON.parse(dec.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.slice(0, 12) }, key, b.slice(12))));
 }
@@ -82,6 +85,13 @@ async function signUp(email, pass){
   user = data.session.user; S().setFlag(true);
   await unlock(pass);
   return 'ok';
+}
+// Um toque: volta para o app já conectado
+const isGoogle = u => u?.app_metadata?.provider === 'google' || !!u?.identities?.some(i => i.provider === 'google');
+async function google(){
+  await client(); S().setFlag(true);
+  const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: 'select_account' } } });
+  if (error) throw new Error(authError(error));
 }
 async function signIn(email, pass){
   await client(); email = email.trim().toLowerCase();
@@ -201,12 +211,14 @@ async function restored(kind, id){
 }
 
 async function init(){
-  if (!S().getFlag()) return;
+  const fromGoogle = /access_token=|[?&]code=/.test(location.hash + location.search);
+  if (!S().getFlag() && !fromGoogle) return;
   try {
     await client();
     const { data } = await sb.auth.getSession();
     user = data.session?.user || null;
-    key = await S().metaGet('syncKey');
+    if (user) S().setFlag(true);
+    key = isGoogle(user) ? 'plain' : await S().metaGet('syncKey');
     emit();
     if (user && key) syncNow();
   } catch (e) { console.warn('sync init', e) }
@@ -215,7 +227,7 @@ addEventListener('online', () => syncNow());
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (!state.last || Date.now() - state.last > 60000)) syncNow() });
 
 window.Sync = {
-  init, signUp, signIn, hasVault, unlock, signOut, syncNow, changed, deleted, restored,
+  init, google, signUp, signIn, hasVault, unlock, signOut, syncNow, changed, deleted, restored,
   on: fn => listeners.add(fn),
   get state(){ return { ...state, email: user?.email || '', signedIn: !!user, unlocked: !!key } },
 };
