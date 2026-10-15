@@ -206,8 +206,8 @@ function findDates(text){
   const r2 = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
   while ((m = r2.exec(text))) push(iso(+m[1], +m[2], +m[3]), m.index);
   // inclui o formato bilíngue do passaporte: "11 FEV/FEB 2021"
-  const r3 = /\b(\d{1,2})\s*(?:de\s+)?([A-Za-zçÇ]{3,9})(?:\/[A-Za-z]{3,9})?\.?\s*(?:de\s+)?,?\s*(\d{4})\b/g;
-  while ((m = r3.exec(text))) { const mo = MONTH[m[2].slice(0, 3).toLowerCase()]; if (mo) push(iso(+m[3], mo, +m[1]), m.index) }
+  const r3 = /\b(\d{1,2})\s*(?:de\s+)?([A-Za-zçÇ]{3,9})(?:\/[A-Za-z]{3,9})?\.?\s*(?:de\s+)?,?\s*(\d{4}|\d{2})\b(?![:h]\d)/g;
+  while ((m = r3.exec(text))) { const mo = MONTH[m[2].slice(0, 3).toLowerCase()]; if (mo) push(iso(fullYear(+m[3]), mo, +m[1]), m.index) }
   const r4 = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/g;
   while ((m = r4.exec(text))) { const mo = MONTH[m[1].slice(0, 3).toLowerCase()]; if (mo) push(iso(+m[3], mo, +m[2]), m.index) }
   // sem ano: "30 de out." / "30 out" → próxima ocorrência
@@ -233,7 +233,30 @@ function findDates(text){
 const fmtBR = d => d.split('-').reverse().join('/');
 
 // Bilhetes com vários voos: "São Paulo (GRU) to Dubai (DXB)" ... dados de cada trecho
+// E-mails de companhia aérea: cada voo é um bloco que começa em "Partida Chegada" / "Departure Arrival"
+function parseBlocks(T){
+  const heads = [...T.matchAll(/\*?\s*(?:partida|departure|sa[íi]da)\s*\*?\s*\*?\s*(?:chegada|arrival|llegada)\b/gi)];
+  if (heads.length < 1) return [];
+  return heads.map((h, i) => {
+    const seg = T.slice(h.index + h[0].length, heads[i + 1]?.index ?? h.index + 1200);
+    const codes = [...seg.matchAll(/\b([A-Z]{3})\b/g)].map(m => m[1]).filter(c => AIRPORTS.has(c));
+    // horário seguido da data dele (até 45 caracteres depois)
+    const pairs = [];
+    for (const t of seg.matchAll(/\b(\d{1,2}):(\d{2})\b/g)) {
+      const after = seg.slice(t.index, t.index + 60), d = findDates(after)[0];
+      if (d) pairs.push(`${d.date}T${t[1].padStart(2, '0')}:${t[2]}`);
+    }
+    const cityAfter = code => { const m = seg.match(new RegExp('\\b' + code + '\\b[\\s*]*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .\'-]{1,28}?)\\s*(?:\\*|\\n|$)')); return m ? titleCase(m[1]) : code };
+    const fl = seg.match(AIRLINE_CODE);
+    return codes.length >= 2 ? { from: cityAfter(codes[0]), fromCode: codes[0], to: cityAfter(codes[1]), toCode: codes[1], flight: fl ? `${fl[1]} ${fl[2]}` : '', dep: pairs[0] || '', arr: pairs[1] || '', terminal: '', seat: '' } : null;
+  }).filter(Boolean);
+}
 function parseLegs(T){
+  const blocks = parseBlocks(T);
+  const byCity = parseLegsByCity(T);
+  return blocks.length > byCity.length ? blocks : byCity;
+}
+function parseLegsByCity(T){
   const re = /([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,30}?)\s*\(([A-Z]{3})\)\s*(?:to|para|-|–|→|>|a)\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,30}?)\s*\(([A-Z]{3})\)/g;
   const hits = [...T.matchAll(re)].filter(m => AIRPORTS.has(m[2]) || AIRPORTS.has(m[4]));
   return hits.map((m, i) => {
@@ -262,13 +285,17 @@ function parseLegs(T){
 const near = (dates, re) => dates.find(d => re.test(d.ctx.slice(-35)))?.date;
 const latest = dates => dates.map(d => d.date).sort().pop();
 const future = dates => dates.filter(d => d.date >= new Date(Date.now() - 864e5 * 400).toISOString().slice(0, 10));
-const grab = (text, re, ok = () => true) => { const m = text.match(re); return m && ok(m[1]) ? m[1].trim() : '' };
+const grab = (text, re, ok = () => true) => {
+  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
+  for (const m of text.matchAll(g)) if (m[1] && ok(m[1].trim())) return m[1].trim();
+  return '';
+};
 const oneOf = (text, list) => list.find(n => new RegExp('\\b' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(text)) || '';
 const upperCode = s => s === s.toUpperCase() && /[A-Z]/.test(s) && /\d/.test(s) || /^[A-Z]{6}$/.test(s);
 
 const AIRLINES = ['LATAM', 'GOL', 'Azul', 'TAP Air Portugal', 'TAP', 'Air France', 'KLM', 'Iberia', 'American Airlines', 'United Airlines', 'Delta', 'Vietnam Airlines', 'VietJet', 'Thai Airways', 'Singapore Airlines', 'Cathay Pacific', 'Japan Airlines', 'ANA', 'Korean Air', 'Etihad', 'AirAsia', 'Qantas', 'EVA Air', 'China Airlines', 'Malaysia Airlines', 'Philippine Airlines', 'Jetstar', 'Scoot', 'Aeroméxico', 'Sky Airline', 'Arajet', 'Norwegian', 'SAS', 'Finnair', 'Aer Lingus', 'Virgin Atlantic', 'Southwest', 'JetBlue', 'Condor', 'Eurowings', 'Wizz Air', 'Transavia', 'Brussels Airlines', 'Austrian', 'LOT', 'Aegean', 'Pegasus', 'Saudia', 'Oman Air', 'EgyptAir', 'South African Airways', 'Emirates', 'Qatar Airways', 'Lufthansa', 'British Airways', 'Copa', 'Avianca', 'Aerolíneas Argentinas', 'Turkish Airlines', 'Air Europa', 'ITA Airways', 'Swiss', 'Ryanair', 'easyJet', 'Vueling', 'JetSMART', 'Air Canada', 'Ethiopian', 'Royal Air Maroc'];
 const STAYS = ['Booking.com', 'Airbnb', 'Expedia', 'Hotels.com', 'Decolar', 'Agoda', 'Accor', 'Marriott', 'Hilton', 'IHG', 'Ibis', 'Novotel', 'Meliá', 'NH Hotels', 'Hostelworld', 'Vrbo'];
-const INSURERS = ['Assist Card', 'Affinity', 'GTA', 'Travel Ace', 'Allianz', 'Porto Seguro', 'Intermac', 'Vital Card', 'April', 'Universal Assistance', 'Coris', 'SulAmérica', 'Mapfre', 'AXA', 'Seguros Promo', 'Real Seguro', 'Mondial', 'Bradesco Seguros', 'Itaú Seguros', 'Chubb', 'Zurich', 'Europ Assistance'];
+const INSURERS = ['AIG', 'Assist Card', 'Affinity', 'GTA', 'Travel Ace', 'Allianz', 'Porto Seguro', 'Intermac', 'Vital Card', 'April', 'Universal Assistance', 'Coris', 'SulAmérica', 'Mapfre', 'AXA', 'Seguros Promo', 'Real Seguro', 'Mondial', 'Bradesco Seguros', 'Itaú Seguros', 'Chubb', 'Zurich', 'Europ Assistance'];
 const BANKS = ['Nubank', 'Itaú', 'Bradesco', 'Santander', 'Banco do Brasil', 'Caixa', 'Inter', 'C6 Bank', 'BTG', 'XP', 'Sicredi', 'Sicoob', 'Wise', 'Revolut', 'Nomad', 'Banco Safra', 'PicPay', 'Mercado Pago'];
 const TOURS = ['GetYourGuide', 'Get Your Guide', 'Viator', 'Civitatis', 'Klook', 'Tiqets', 'Musement', 'Headout', 'Fever', 'Tripadvisor', 'Airbnb Experiences', 'Guruwalk', 'Freetour', 'Sandemans'];
 
@@ -307,7 +334,17 @@ const AIRPORTS = new Set(('GRU CGH VCP GIG SDU BSB CNF SSA REC FOR POA CWB FLN N
 const NOT_AIRPORT = new Set(['CPF', 'BRL', 'USD', 'EUR', 'PDF', 'LTD', 'CNH', 'GMT', 'UTC', 'TAP', 'PNR', 'VAT', 'ATM', 'CEP', 'NIF']);
 const PLACES = { BRA:['brasileiro','Brasil'], PRT:['português','Portugal'], ITA:['italiano','Itália'], ESP:['espanhol','Espanha'], D:['alemão','Alemanha'], DEU:['alemão','Alemanha'], FRA:['francês','França'], USA:['americano','Estados Unidos'], ARG:['argentino','Argentina'], GBR:['britânico','Reino Unido'], URY:['uruguaio','Uruguai'], PRY:['paraguaio','Paraguai'], CHL:['chileno','Chile'], JPN:['japonês','Japão'], CAN:['canadense','Canadá'], MEX:['mexicano','México'], POL:['polonês','Polônia'], NLD:['holandês','Holanda'], CHE:['suíço','Suíça'], IRL:['irlandês','Irlanda'], AUS:['australiano','Austrália'], NZL:['neozelandês','Nova Zelândia'], CHN:['chinês','China'], IND:['indiano','Índia'], COL:['colombiano','Colômbia'], PER:['peruano','Peru'], AUT:['austríaco','Áustria'], BEL:['belga','Bélgica'], GRC:['grego','Grécia'], ISR:['israelense','Israel'], ZAF:['sul-africano','África do Sul'], KOR:['sul-coreano','Coreia do Sul'] };
 
+// "Miss Mariana LemesFerronato", "Miss Natalia Andres" → todos os passageiros
+function holdersFrom(text){
+  const out = [];
+  for (const m of text.matchAll(/\b(?:Miss|Mrs|Mr|Ms|Mstr|Sra|Sr)\.?\s+([A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][A-Za-zà-ÿ]+){1,3})/g)) {
+    const n = titleCase(m[1].replace(/([a-zà-ÿ])([A-ZÀ-Ý])/g, '$1 $2').replace(/\s+(Adicione|Add|Ou|Or)\b.*$/s, ''));
+    if (!out.includes(n)) out.push(n);
+  }
+  return out;
+}
 function holderFrom(text){
+  const hs = holdersFrom(text); if (hs.length) return hs[0];
   const sl = text.match(/(?:passenger(?:\s+name)?|passageiro|nome\s+do\s+passageiro)\s*[:\-]?\s*\n?\s*([A-Z][A-Z' -]{1,40})\/\s*\n?\s*([A-Z][A-Z' ]{1,40})/i);
   if (sl) {
     const giv = sl[2].trim().replace(/\s*(MISS|MRS|MSTR|MR|MS)$/i, '').replace(/(MISS|MRS|MSTR)$/i, '');
@@ -340,7 +377,7 @@ function fromText(type, text){
   switch (type) {
     case 'ticket': {
       r.number = grab(T, /(?:localizador\s+da\s+(?:companhia|cia)(?:\s+a[ée]rea)?|c[óo]digo\s+(?:de\s+reserva\s+)?da\s+(?:companhia|cia)(?:\s+a[ée]rea)?|airline\s+(?:reference|booking\s+(?:reference|code)|confirmation(?:\s+code)?|locator|pnr)|refer[êe]ncia\s+da\s+companhia(?:\s+a[ée]rea)?)\s*(?:\([^)]*\))?\s*[:#\-]?\s*\n?\s*([A-Z0-9]{6})\b/i, upperCode)
-        || grab(T, /(?:localizador|c[óo]digo\s+(?:de\s+)?(?:reserva|confirma[çc][ãa]o)|booking\s+(?:reference|code|ref\.?)|record\s+locator|reservation\s+(?:code|number)|confirmation\s+(?:code|number)|pnr|reserva)\s*(?:n[º°o.]*)?\s*[:#\-]?\s*\n?\s*([A-Z0-9]{6})\b/i, upperCode);
+        || grab(T, /(?:localizador|c[óo]digo\s+(?:de\s+)?(?:reserva|confirma[çc][ãa]o)|booking\s+(?:reference|code|ref\.?)|record\s+locator|reservation\s+(?:code|number)|confirmation\s+(?:code|number)|pnr|reserva)\s*(?:n[º°o.]*)?[\s*:#\-]{0,10}([A-Z0-9]{6})\b/i, upperCode);
       const agencyRef = grab(T, /(?:refer[êe]ncia\s+da\s+reserva|n[úu]mero\s+da\s+reserva|n[º°o.]\s*da\s+reserva|booking\s+(?:reference|number|id)|order\s+(?:number|id)|n[úu]mero\s+do\s+pedido)\s*[:#]?\s*\n?\s*(\d[\d\-\s]{5,18}\d)\b/i).replace(/\s+/g, '');
       if (!r.number && agencyRef) r.number = agencyRef;
       const codes = [...T.matchAll(/\(([A-Z]{3})\)/g)].map(m => m[1]).filter(c => !NOT_AIRPORT.has(c));
@@ -419,7 +456,8 @@ function fromText(type, text){
       const hotel = lines.find(l => l.length <= 60 && /\b(hotel|pousada|hostel|resort|inn|suites|apart|residence|albergue|apartamento|guesthouse|b&b)\b/i.test(l) && !/check|reserva|confirma|endere/i.test(l)) || '';
       const plat = oneOf(T, STAYS);
       X.hotel = hotel ? titleCase(hotel).replace(/\bhotel\b/i, 'Hotel') : '';
-      X.address = grab(T, /(?:endere[çc]o|address|localiza[çc][ãa]o|direcci[óo]n)\s*[:\-]?\s*\n?\s*([^\n]{8,120})/i)
+      // endereço pode continuar na linha de baixo (linha termina em vírgula)
+      X.address = grab(T, /(?:endere[çc]o|address|localiza[çc][ãa]o|direcci[óo]n)\s*[:\-]?\s*\n?\s*((?:[^\n]{3,120},\s*\n\s*)*[^\n]{8,120})/i).replace(/\s*\n\s*/g, ' ')
         || lines.find(l => l.length <= 120 && /\b(rua|r\.|av\.?|avenida|alameda|travessa|pra[çc]a|largo|rodovia|street|st\.|road|rd\.|avenue|ave\.|calle|via|rue|strasse|straße|platz)\b/i.test(l) && /\d/.test(l)) || '';
       r.title = X.hotel || (plat ? `Hospedagem ${plat}` : 'Hospedagem');
       X.checkin = near(dates, /(check-?in|entrada|chegada|arrival)\b[\s\S]{0,25}$/i) || fut[0]?.date || '';
@@ -427,18 +465,22 @@ function fromText(type, text){
       r.start = X.checkin; r.end = X.checkout;
       // Outros dados úteis da reserva, cada um no seu campo
       if (plat && hotel) r.notes = `Reservado pelo ${plat}`;
-      X.checkinTime = timeAfter(T, /check-?in[^\n]{0,40}?(?:a\s+partir\s+d[aeo]s?|from|após|after|desde)\s*(\d{1,2}[:h]\d{2})/i);
-      X.checkoutTime = timeAfter(T, /check-?out[^\n]{0,40}?(?:at[ée]|until|before|antes\s+d[aeo]s?|hasta)\s*(\d{1,2}[:h]\d{2})/i);
+      X.checkinTime = timeAfter(T, /(?:check-?in|entrada|chegada)[^\n]{0,70}?(?:a\s+partir\s+d[aeo]s?|from|após|after|desde)\s*(\d{1,2}[:h]\d{2})/i);
+      X.checkoutTime = timeAfter(T, /(?:check-?out|sa[íi]da)[^\n]{0,70}?(?:at[ée](?:\s+[àa]s)?|until|before|antes\s+d[aeo]s?|hasta)\s*(\d{1,2}[:h]\d{2})/i);
       X.phone = grab(T, /(?:telefone|phone|tel\.?|fone)\s*[:\-]?\s*(\+?\d[\d\s().\-]{7,20}\d)/i).trim();
       X.total = money(T, /(?:pre[çc]o\s+total|valor\s+total|total\s+price|total\s+a\s+pagar|total)\s*[:\-]?\s*([^\n]{2,30})/i);
-      X.nights = grab(T, /(\d{1,2})\s*(?:noites?|nights?)\b/i);
+      X.nights = grab(T, /(\d{1,2})\s*(?:noites?|nights?|di[áa]rias?)\b/i);
       break;
     }
     case 'insurance': {
       r.number = grab(T, /(?:ap[óo]lice|voucher|certificado|bilhete|policy|n[º°o.]?\s*do\s*seguro)\s*(?:n[º°o.]*|number|no\.?)?\s*[:#]?\s*\n?\s*([A-Z0-9][A-Z0-9.\-\/]{4,24})\b/i, s => /\d/.test(s));
+      r.start = near(dates, /(emiss[ãa]o|in[íi]cio|vig[êe]ncia)[\s\S]{0,25}$/i) || r.start;
       const ins = oneOf(T, INSURERS);
-      r.title = ins ? `Seguro ${ins}` : 'Seguro viagem';
+      const insurer = grab(T, /(?:seguradora|insurer|insurance\s+company)\s*[:\-]\s*([^\n]{3,60})/i);
+      if (insurer) X.insurer = insurer.replace(/\s+(S\.?A\.?|Ltda\.?)\s*$/i, '');
+      r.title = ins ? `Seguro ${ins}${/visa/i.test(T) ? ' (cartão Visa)' : ''}` : 'Seguro viagem';
       X.phone = grab(T, /(?:central\s+de\s+(?:atendimento|emerg[êe]ncia)|emerg[êe]ncia|emergency|assist[êe]ncia\s+24\s*h?|whatsapp|telefone|phone)[^\n+]{0,30}?(\+?\d[\d\s().\-]{7,20}\d)/i).trim();
+      if (!X.phone) X.phone = grab(T, /(?:central\s+de\s+atendimento|atendimento|emerg[êe]ncia|emergency|assist[êe]ncia)[\s\S]{0,90}?(\+?\d[\d\s().\-]{7,20}\d)/i).trim();
       X.value = money(T, /(?:valor\s+(?:da\s+)?ap[óo]lice|valor\s+segurado|cobertura(?:\s+m[ée]dica)?|despesas\s+m[ée]dicas|medical|capital\s+segurado)[^\n]{0,60}?((?:R\$|US\$|USD|EUR|€|£)\s?[\d.,]{3,}|[\d.,]{3,}\s?(?:EUR|€|USD))/i)
         || money(T, /(?:valor\s+total|total\s+pago|pr[êe]mio|total)[^\n]{0,30}?((?:R\$|US\$|USD|EUR|€)\s?[\d.,]{3,})/i);
       r.start = near(dates, /(in[íi]cio|de|from|vig[êe]ncia|sa[íi]da)\s*[:\-]?\s*$/i) || fut[0]?.date;
@@ -514,6 +556,7 @@ function fromText(type, text){
   }
   for (const k in X) if (!X[k]) delete X[k];
   r.holder = holderFrom(T);
+  r.holders = holdersFrom(T);
   r.dates = fut.map(d => d.date);
   return r;
 }
@@ -641,7 +684,7 @@ async function read(files, forcedType, status = () => {}){
   }
   if (allText.trim()) {
     const r = fromText(type, allText);
-    for (const k of ['title', 'number', 'holder', 'expires', 'notes']) set(k, r[k]);
+    for (const k of ['title', 'number', 'holder', 'holders', 'expires', 'notes']) set(k, r[k]);
     for (const [k, v] of Object.entries(r.x || {})) setx(k, v);
     out.start = r.start; out.end = r.end; out.birth ||= r.birth;
     out.dates = r.dates;

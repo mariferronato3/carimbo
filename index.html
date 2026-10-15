@@ -735,7 +735,11 @@ async function readNewDoc(fileList, existing){
     const keep = Object.fromEntries(['title', 'number', 'holder', 'expires', 'notes'].map(k => [k, has(k, existing[k]) ? existing[k] : res[k]]));
     const x = { ...res.x }; for (const [k, v] of Object.entries(existing.x || {})) if (v) x[k] = v;
     const filled = res.filled.filter(k => k.startsWith('x.') ? x[k.slice(2)] === res.x[k.slice(2)] : keep[k] === res[k]);
-    return openDocForm({ ...existing, ...keep, x, type: res.type }, { ...res, filled, detected: res.type !== existing.type });
+    // bilhete com as duas passageiras → "As duas"
+    const who = new Set((res.holders || []).map(personOf).filter(Boolean));
+    const person = existing.person || (who.size > 1 ? 'both' : '');
+    if (who.size > 1 && !has('holder', existing.holder)) keep.holder = res.holders.join(' e ');
+    return openDocForm({ ...existing, ...keep, x, type: res.type, ...(person ? { person } : {}) }, { ...res, filled, detected: res.type !== existing.type });
   }
   openDocForm(null, { ...res, files });
 }
