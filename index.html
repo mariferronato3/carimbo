@@ -64,6 +64,10 @@ button{cursor:pointer}
 .tag.who-t{background:var(--ink);color:var(--paper)}
 .alert.risk .row-btns{margin-top:10px}
 .alert.risk{margin-top:16px}
+.safeline{margin:6px 0 0;font-size:14px;font-weight:600;color:var(--ok)}
+.safeline::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:7px;vertical-align:1px}
+.steps{padding-left:22px;margin:4px 0 12px}
+.steps li{margin:8px 0;font-size:17px}
 .syncline{display:block;background:none;border:0;padding:6px 0 0;margin:0;font-size:14px;font-weight:600;color:var(--stamp);text-align:left}
 .syncline.err{color:var(--bad)}
 .next{margin:14px 0 0;font-size:15px;color:var(--ink-2)}
@@ -312,6 +316,7 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
     </div>
     <div class="who" id="who" role="group" aria-label="De quem são os documentos"></div>
     <p class="next" id="next"></p>
+    <p class="safeline" id="safeline" hidden></p>
     <button class="syncline" id="syncline" data-act="settings"></button>
   </div>
   <div class="guil" id="guil"></div>
@@ -483,23 +488,34 @@ const installed = () => matchMedia('(display-mode: standalone)').matches || navi
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let persisted = null;
 navigator.storage?.persisted?.().then(v => { persisted = v; render() }).catch(() => {});
+// Chrome oferece instalar com um toque: guardamos o pedido para o botão
+let installPrompt = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; render() });
+addEventListener('appinstalled', () => { installPrompt = null; render() });
+async function installApp(){
+  if (installPrompt) { installPrompt.prompt(); const r = await installPrompt.userChoice.catch(() => null); installPrompt = null; if (r?.outcome === 'accepted') toast('Carimbo instalado'); render(); return }
+  const dlg = $('#form');
+  dlg.innerHTML = `<div class="sheet"><div class="sheet-h"><h2>Instalar o Carimbo</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
+    <div class="sheet-b"><ol class="steps">${isIOS
+      ? '<li>Abra este endereço no <b>Safari</b>.</li><li>Toque em <b>Compartilhar</b> (o quadrado com a seta).</li><li>Toque em <b>Adicionar à Tela de Início</b>.</li><li>Use sempre pelo ícone do Carimbo.</li>'
+      : '<li>Abra este endereço no <b>Chrome</b> (não dentro do WhatsApp ou do Instagram).</li><li>Toque no menu <b>⋮</b>, no canto de cima.</li><li>Toque em <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b> e depois <b>Instalar</b>).</li><li>Use sempre pelo ícone do Carimbo.</li>'}</ol>
+    <p class="lead">Instalado, o celular protege os documentos e não apaga sozinho.</p></div></div>`;
+  dlg.showModal();
+}
 function riskNote(){
   const st = window.Sync?.state || {};
-  if (st.signedIn && st.unlocked) return '';            // sincronizado: está seguro
-  if (!state.docs.length) return '';
-  const how = isIOS ? 'No Safari, toque em Compartilhar e em “Adicionar à Tela de Início”, e use sempre pelo ícone.'
-    : 'No Chrome, toque no menu ⋮ e em “Instalar app” (ou “Adicionar à tela inicial”), e use sempre pelo ícone.';
-  if (!installed()) return `<div class="alert bad risk" role="alert"><strong>Seus documentos podem sumir</strong>
-    Eles estão só neste navegador, que pode apagá-los (pouco espaço, limpeza de dados${isIOS ? ', 7 dias sem abrir' : ''}). Entre com Google para guardar tudo na nuvem do Carimbo.
-    <div class="row-btns"><button class="btn sm stamp" data-act="google">${GOOGLE_ICON}Salvar na nuvem com Google</button><button class="btn sm ghost" data-act="export">Baixar backup</button></div></div>`;
-  if (persisted === false) return `<div class="alert risk" role="alert"><strong>Seus documentos estão só neste aparelho</strong>
-    Se o celular ficar sem espaço ou os dados do navegador forem limpos, eles se perdem. Entre com Google para guardar tudo na nuvem do Carimbo.
-    <div class="row-btns"><button class="btn sm stamp" data-act="google">${GOOGLE_ICON}Salvar na nuvem com Google</button></div></div>`;
-  return '';
+  const synced = st.signedIn && st.unlocked;
+  const safeHere = installed() && persisted !== false;
+  if (synced || safeHere) return '';
+  return `<div class="alert bad risk" role="alert"><strong>Seus documentos ainda podem sumir</strong>
+    Aberto pelo navegador, o celular pode apagar os dados quando falta espaço ou quando o navegador é limpo. ${installed() ? 'Este aparelho não liberou o armazenamento protegido. Salve uma cópia na nuvem.' : '<b>Instale o Carimbo</b>: instalado, o celular guarda os documentos protegidos, só para você, sem conta.'}
+    <div class="row-btns">${installed() ? '' : '<button class="btn sm stamp" data-act="install">Instalar o Carimbo</button>'}<button class="btn sm ghost" data-act="google">${GOOGLE_ICON}Cópia na nuvem</button></div></div>`;
 }
 function renderSyncLine(){
   const el = $('#syncline'); if (!el || !window.Sync) return;
   const st = Sync.state;
+  const safe = $('#safeline');
+  if (safe) { const ok = installed() && persisted !== false; safe.hidden = !ok; safe.textContent = ok ? 'Protegido neste celular' : '' }
   el.textContent = !st.signedIn || !st.unlocked ? 'Salvar na nuvem: entrar com Google'
     : st.status === 'syncing' ? 'Sincronizando…'
     : st.status === 'offline' ? 'Sem internet: sincroniza quando a conexão voltar'
@@ -1012,7 +1028,11 @@ function renderSync(msg = ''){
   box.innerHTML = `<h3>Sincronizar entre aparelhos</h3>
     <p>Conectado como <b>${esc(st.email)}</b>. Tudo o que você salvar fica guardado na nuvem automaticamente.</p>
     <p class="sync-ok">${label}</p>${note}
-    <div class="row-btns"><button class="btn primary sm" data-act="sync-now">Sincronizar agora</button><button class="btn ghost sm" data-act="sync-out">Sair deste aparelho</button></div>`;
+    <p>Neste aparelho: <b>${state.docs.length}</b> documentos${st.cloud?.docs != null ? `<br>Na nuvem: <b>${st.cloud.docs}</b> documentos` : ''}</p>
+    <div class="row-btns"><button class="btn primary sm" data-act="sync-now">Sincronizar agora</button><button class="btn ghost sm" data-act="restore-cloud">Baixar tudo da nuvem</button></div>
+    <div class="row-btns" id="trashrow"></div>
+    <div class="row-btns"><button class="btn ghost sm" data-act="sync-out">Sair deste aparelho</button></div>`;
+  metaGet('trash').then(t => { const r = $('#trashrow'); if (r && t?.length) r.innerHTML = `<button class="btn ghost sm" data-act="restore-trash">Recuperar ${t.length} da lixeira</button>` }).catch(() => {});
 }
 // não redesenha enquanto a pessoa digita no bloco
 Sync.on(() => { renderSyncLine(); if (!$('dialog[open]')) render() });
@@ -1043,6 +1063,13 @@ async function syncAction(act, btn){
       await Sync.signOut(); syncMode = 'in'; renderSync();
     }
   } catch (e) { renderSync(e.message || 'Algo deu errado. Tente de novo.') }
+}
+
+async function restoreTrash(){
+  const t = (await metaGet('trash')) || [];
+  for (const { kind, item } of t) { item.updatedAt = Date.now(); await dbPut(kind, item); await Sync.restored(kind, item.id) }
+  await metaPut('trash', []); await load(); Sync.changed();
+  toast(`${t.length} documentos recuperados`); renderSync();
 }
 
 /* ---------- Backup ---------- */
@@ -1138,6 +1165,9 @@ document.addEventListener('click', async e => {
     case 'settings': openSettings(); break;
     case 'export': exportAll(); break;
     case 'google': Sync.google().catch(e => toast(e.message)); break;
+    case 'install': installApp(); break;
+    case 'restore-cloud': b.disabled = true; b.textContent = 'Baixando…'; Sync.restoreAll().then(n => { toast(`${n} documentos baixados da nuvem`); renderSync() }).catch(e => { toast(e.message); renderSync() }); break;
+    case 'restore-trash': restoreTrash(); break;
     case 'sync-email': syncMode = 'in'; renderSync(); break;
     case 'sync-up': case 'sync-in': case 'sync-mode': case 'sync-now': case 'sync-out': syncAction(act, b); break;
     case 'close': { const d = b.closest('dialog'); if (d.id === 'viewer') closeViewer(); else { readToken++; d.close() } break }

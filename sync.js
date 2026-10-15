@@ -7,7 +7,7 @@ const SB_KEY = 'sb_publishable_76Qea6NcI1lUZZNJ4pWfvA_4DgjpToZ';   // chave púb
 const BUCKET = 'vault';
 const KINDS = ['docs', 'trips'];
 
-let sb = null, key = null, user = null, busy = false, again = false, timer = null;
+let sb = null, key = null, user = null, again = false, timer = null;
 const state = { status: 'off', last: null, error: '' };
 const S = () => window.CarimboStore;
 const listeners = new Set();
@@ -137,55 +137,90 @@ async function signOut(){
 }
 
 /* ---------- Sincronizar ---------- */
-async function syncNow(){
+// Uma sincronização por vez; quem pedir durante uma em andamento espera ela (e a seguinte) terminar
+let running = null;
+function syncNow(){
+  if (running) { again = true; return running }
+  running = (async () => { do { again = false; await syncOnce() } while (again); running = null })();
+  return running;
+}
+async function syncOnce(){
   if (!user || !key) return;
-  if (busy) { again = true; return }
   if (!navigator.onLine) { set('status', 'offline'); return }
-  busy = true; set('status', 'syncing'); set('error', '');
+  set('status', 'syncing'); set('error', '');
   let changed = false;
   try {
-    const st = (await S().metaGet('syncState')) || { docs: {}, trips: {} };
+    // estado é por conta: trocar de conta nunca apaga nada
+    let st = await S().metaGet('syncState');
+    if (!st || st.uid !== user.id) st = { uid: user.id, docs: {}, trips: {} };
     const dels = (await S().metaGet('syncDeleted')) || { docs: [], trips: [] };
+    const undel = (await S().metaGet('syncUndel')) || { docs: [], trips: [] };
+    const doneDel = { docs: new Set(dels.docs), trips: new Set(dels.trips) }, doneUndel = { docs: new Set(undel.docs), trips: new Set(undel.trips) };
     for (const kind of KINDS) {
-      const listRemote = async () => {
-        const { data, error } = await bucket().list(path(kind), { limit: 1000 });
+      const list = async folder => {
+        const { data, error } = await bucket().list(path(folder), { limit: 1000 });
         if (error) throw error;
-        return new Map((data || []).filter(o => o.name.endsWith('.bin')).map(o => [o.name.slice(0, -4), o.updated_at || o.created_at]));
+        return new Map((data || []).filter(o => o.name !== '.emptyFolderPlaceholder').map(o => [o.name.replace(/\.bin$/, ''), o.updated_at || o.created_at]));
       };
-      const remote = await listRemote(), known = st[kind] || (st[kind] = {});
-      // apagados neste aparelho: apaga na nuvem
+      // desfeitos: tira o registro de exclusão
+      for (const id of undel[kind] || []) await bucket().remove([path(kind + '-del', id)]);
+      // apagados neste aparelho: apaga na nuvem e deixa um registro explícito de exclusão
       for (const id of dels[kind] || []) {
-        if (remote.has(id)) await bucket().remove([path(kind, id + '.bin')]);
-        remote.delete(id); delete known[id];
+        await bucket().remove([path(kind, id + '.bin')]);
+        const up = await bucket().upload(path(kind + '-del', id), new Blob([String(Date.now())]), { upsert: true });
+        if (up.error) throw up.error;
       }
-      dels[kind] = [];
+      const remote = await list(kind), tomb = await list(kind + '-del'), known = st[kind] || (st[kind] = {});
       for (const item of await S().dbAll(kind)) {
         const k = known[item.id], lu = item.updatedAt || item.createdAt || 0;
-        if (!remote.has(item.id)) {
-          if (k) { await S().dbDel(kind, item.id); delete known[item.id]; changed = true; continue }   // apagado no outro aparelho
-          await push(kind, item); continue;                                                          // novo aqui
-        }
+        // só apaga aqui se outro aparelho registrou a exclusão; guarda na lixeira mesmo assim
+        if (tomb.has(item.id)) { await toTrash(kind, item); await S().dbDel(kind, item.id); delete known[item.id]; changed = true; continue }
+        // não está na nuvem: envia (nunca apaga por ausência)
+        if (!remote.has(item.id)) { await push(kind, item); continue }
         if (!k || lu > (k.l || 0)) await push(kind, item);                                           // mudou aqui
         else if (remote.get(item.id) !== k.r) { await pull(kind, item.id); changed = true }          // mudou lá
         remote.delete(item.id);
       }
-      for (const id of remote.keys()) { await pull(kind, id); changed = true }                       // novo no outro aparelho
+      for (const id of remote.keys()) if (!tomb.has(id)) { await pull(kind, id); changed = true }    // novo no outro aparelho
       // guarda o estado para comparar na próxima vez
-      const now = await listRemote();
+      const now = await list(kind);
       st[kind] = {};
       for (const item of await S().dbAll(kind)) if (now.has(item.id)) st[kind][item.id] = { r: now.get(item.id), l: item.updatedAt || item.createdAt || 0 };
+      state.cloud = { ...(state.cloud || {}), [kind]: now.size };
     }
-    await S().metaPut('syncState', st); await S().metaPut('syncDeleted', dels);
+    await S().metaPut('syncState', st);
+    // tira só o que foi processado agora (o que for apagado durante a sincronização fica para a próxima)
+    for (const [name, done] of [['syncDeleted', doneDel], ['syncUndel', doneUndel]]) {
+      const cur = (await S().metaGet(name)) || { docs: [], trips: [] };
+      for (const kind of KINDS) cur[kind] = (cur[kind] || []).filter(id => !done[kind].has(id));
+      await S().metaPut(name, cur);
+    }
     state.last = new Date(); set('status', 'ok');
   } catch (e) {
     console.warn('sync', e);
     set('error', /fetch|network/i.test(e.message || '') ? 'Sem conexão com o servidor.' : (e.message || 'Erro ao sincronizar'));
     set('status', 'error');
   } finally {
-    busy = false;
     if (changed) await S().reload();
-    if (again) { again = false; syncNow() }
   }
+}
+// Lixeira local: o que a sincronização remove fica guardado para poder voltar
+async function toTrash(kind, item){
+  const t = (await S().metaGet('trash')) || [];
+  t.unshift({ kind, item, at: Date.now() });
+  await S().metaPut('trash', t.slice(0, 50));
+}
+// Baixa tudo o que está na nuvem (sem apagar nada daqui)
+async function restoreAll(){
+  if (!user || !key) return 0;
+  let n = 0;
+  for (const kind of KINDS) {
+    const { data, error } = await bucket().list(path(kind), { limit: 1000 });
+    if (error) throw error;
+    for (const o of data || []) if (o.name.endsWith('.bin')) { await pull(kind, o.name.slice(0, -4)); n++ }
+  }
+  await S().reload(); syncNow();
+  return n;
 }
 async function push(kind, item){
   const up = await bucket().upload(path(kind, item.id + '.bin'), await seal(await pack(kind, item)), { upsert: true });
@@ -207,7 +242,9 @@ async function deleted(kind, id){
 }
 async function restored(kind, id){
   const d = (await S().metaGet('syncDeleted')) || { docs: [], trips: [] };
-  d[kind] = d[kind].filter(x => x !== id); await S().metaPut('syncDeleted', d); changed();
+  if (d[kind].includes(id)) d[kind] = d[kind].filter(x => x !== id);
+  else { const u = (await S().metaGet('syncUndel')) || { docs: [], trips: [] }; u[kind].push(id); await S().metaPut('syncUndel', u) }
+  await S().metaPut('syncDeleted', d); changed();
 }
 
 async function init(){
@@ -227,7 +264,7 @@ addEventListener('online', () => syncNow());
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (!state.last || Date.now() - state.last > 60000)) syncNow() });
 
 window.Sync = {
-  init, google, signUp, signIn, hasVault, unlock, signOut, syncNow, changed, deleted, restored,
+  init, google, restoreAll, signUp, signIn, hasVault, unlock, signOut, syncNow, changed, deleted, restored,
   on: fn => listeners.add(fn),
   get state(){ return { ...state, email: user?.email || '', signedIn: !!user, unlocked: !!key } },
 };
