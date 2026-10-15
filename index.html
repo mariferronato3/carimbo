@@ -1185,6 +1185,13 @@ async function restoreTrash(){
 }
 
 /* ---------- Backup ---------- */
+// mostra se tudo do celular já está na nuvem
+function cloudLine(st){
+  const here = state.docs.length, there = st.cloud?.docs;
+  if (there == null) return `<p class="acc-note">${navigator.onLine ? 'Conferindo a nuvem…' : 'Sem internet agora. Tudo continua guardado neste celular.'}</p>`;
+  return there >= here ? `<p class="acc-p"><b>Tudo salvo na nuvem</b> (${there} ${there === 1 ? 'documento' : 'documentos'}).</p>`
+    : `<p class="acc-note">${here - there} ${here - there === 1 ? 'documento ainda não subiu' : 'documentos ainda não subiram'} para a nuvem. Eles continuam guardados neste celular.</p><div class="row-btns"><button class="btn ghost sm" data-act="send-now">Enviar agora</button></div>`;
+}
 function openSettings(){
   const st = Sync.state, dlg = $('#form');
   const pending = st.status === 'error' ? '<p class="acc-note">Não consegui salvar a última mudança. Vou tentar de novo quando houver internet.</p>' : '';
@@ -1194,18 +1201,18 @@ function openSettings(){
       <div class="acc"><span class="avatar big">${(st.email || '?').charAt(0).toUpperCase()}</span><div><b>${esc(st.email)}</b><span>${state.docs.length} ${state.docs.length === 1 ? 'documento salvo' : 'documentos salvos'}</span></div></div>
       <p class="acc-p">Tudo o que você adiciona fica salvo na sua conta e aparece em qualquer celular em que você entrar com este Google.</p>
       ${pending}
+      ${cloudLine(st)}
       <div id="trashrow"></div>
       <div class="row-btns"><button class="btn ghost sm" data-act="logout">Sair da conta</button></div>
     </div></div>`;
   dlg.showModal();
   metaGet('trash').then(t => { const r = $('#trashrow'); if (r && t?.length) r.innerHTML = `<p class="acc-p">${t.length === 1 ? 'Há 1 documento' : `Há ${t.length} documentos`} na lixeira.</p><div class="row-btns"><button class="btn ghost sm" data-act="restore-trash">Recuperar da lixeira</button></div>` }).catch(() => {});
 }
+// Sair nunca apaga nada do celular: ao entrar de novo, tudo continua aqui
 async function logout(){
-  if (!confirm('Sair da conta neste celular? Seus documentos continuam salvos na conta.')) return;
-  await Sync.syncNow();
-  if (Sync.state.status === 'error' && !confirm('Algumas mudanças ainda não foram salvas. Sair mesmo assim? Elas serão perdidas.')) return;
+  if (!confirm('Sair da conta? Seus documentos continuam guardados neste celular e voltam quando você entrar de novo.')) return;
+  await Sync.syncNow().catch(() => {});
   await Sync.signOut();
-  await Promise.all(['docs', 'trips', 'meta'].map(n => tx(n, 'readwrite', x => x.clear())));
   location.reload();
 }
 const toDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b) });
@@ -1279,6 +1286,7 @@ document.addEventListener('click', async e => {
     case 'pick': openPicker(b); break;
     case 'pick-close': closePicker(); break;
     case 'logout': $('#form').close(); logout(); break;
+    case 'send-now': b.disabled = true; b.textContent = 'Enviando…'; Sync.syncNow().then(() => { openSettings(); toast(Sync.state.status === 'error' ? 'Não deu para enviar agora. Tento de novo sozinho.' : 'Enviado') }); break;
     case 'restore-cloud': b.disabled = true; b.textContent = 'Baixando…'; Sync.restoreAll().then(n => { toast(`${n} documentos baixados da nuvem`); renderSync() }).catch(e => { toast(e.message); renderSync() }); break;
     case 'restore-trash': restoreTrash(); break;
     case 'sync-email': syncMode = 'in'; renderSync(); break;
