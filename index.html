@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Carimbo">
-<title>Carimbo</title>
+<meta name="apple-mobile-web-app-title" content="Carteira Virtual">
+<title>Carteira Virtual</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -349,7 +349,7 @@ form.sheet{position:relative}
     <div class="top-row">
       <h1 class="mark">
         <svg viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-14 20 20)" fill="none" stroke="var(--stamp)"><circle cx="20" cy="20" r="16" stroke-width="2.6"/><circle cx="20" cy="20" r="11.5" stroke-width="1.2" stroke-dasharray="2.4 2"/></g><path d="M14 24c2.6-7.6 10.6-10 14.6-6" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round"/></svg>
-        Carimbo
+        Carteira Virtual
       </h1>
       <button class="avatar" id="avatar" data-act="settings" aria-label="Sua conta"></button>
     </div>
@@ -362,7 +362,7 @@ form.sheet{position:relative}
 <section class="gate" id="gate" hidden>
   <div class="gate-in">
     <svg class="gate-mark" viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-14 20 20)" fill="none" stroke="var(--stamp)"><circle cx="20" cy="20" r="16" stroke-width="2.2"/><circle cx="20" cy="20" r="11.5" stroke-width="1" stroke-dasharray="2.4 2"/></g><path d="M14 24c2.6-7.6 10.6-10 14.6-6" fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/></svg>
-    <h1>Carimbo</h1>
+    <h1>Carteira<br>Virtual</h1>
     <p class="gate-lead">Seus documentos de viagem, sempre à mão. Mesmo sem internet, na fila da embaixada.</p>
     <button class="btn gate-btn" data-act="google" id="gatebtn"></button>
     <p class="gate-fine" id="gatefine">Seus documentos ficam guardados numa pasta privada da sua conta e voltam em qualquer celular em que você entrar. <a href="privacidade.html">Privacidade</a></p>
@@ -445,7 +445,7 @@ const store = {
 
 /* IndexedDB: tudo fica só neste aparelho */
 const dbp = new Promise((res, rej) => {
-  const r = indexedDB.open('carimbo', 2);
+  const r = indexedDB.open('carteira', 2);
   r.onupgradeneeded = () => {
     const db = r.result;
     if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs',  { keyPath:'id' });
@@ -469,13 +469,13 @@ const dbDel = (n, id) => tx(n, 'readwrite', s => s.delete(id));
 const metaGet = k => tx('meta', 'readonly', s => s.get(k));
 const metaPut = (k, v) => tx('meta', 'readwrite', s => s.put(v, k));
 // O que a sincronização (sync.js) usa do app
-window.CarimboStore = {
+window.CarteiraStore = {
   dbAll, dbPut, dbDel, metaGet, metaPut, reload: () => load(),
-  getFlag: () => store.get('carimbo.sync') === '1', setFlag: on => store.set('carimbo.sync', on ? '1' : ''),
+  getFlag: () => store.get('carteira.sync') === '1', setFlag: on => store.set('carteira.sync', on ? '1' : ''),
 };
 
-const state = { docs:[], trips:[], filter: store.get('carimbo.filter') || 'all', person: ['mari', 'nati'].includes(store.get('carimbo.person')) ? store.get('carimbo.person') : 'mari' };
-// Pessoas que usam este Carimbo. 'match' = nomes que aparecem nos documentos dela.
+const state = { docs:[], trips:[], filter: store.get('carteira.filter') || 'all', person: ['mari', 'nati'].includes(store.get('carteira.person')) ? store.get('carteira.person') : 'mari' };
+// Pessoas que usam esta Carteira Virtual. 'match' = nomes que aparecem nos documentos dela.
 const PEOPLE = [
   { id: 'mari', name: 'Mari', match: ['mariana', 'mari'] },
   { id: 'nati', name: 'Nati', match: ['natalia', 'nati'] },
@@ -539,12 +539,12 @@ let installPrompt = null;
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; render() });
 addEventListener('appinstalled', () => { installPrompt = null; render() });
 async function installApp(){
-  if (installPrompt) { installPrompt.prompt(); const r = await installPrompt.userChoice.catch(() => null); installPrompt = null; if (r?.outcome === 'accepted') toast('Carimbo instalado'); render(); return }
+  if (installPrompt) { installPrompt.prompt(); const r = await installPrompt.userChoice.catch(() => null); installPrompt = null; if (r?.outcome === 'accepted') toast('Carteira Virtual instalada'); render(); return }
   const dlg = $('#form');
-  dlg.innerHTML = `<div class="sheet"><div class="sheet-h"><h2>Instalar o Carimbo</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
+  dlg.innerHTML = `<div class="sheet"><div class="sheet-h"><h2>Instalar a Carteira Virtual</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
     <div class="sheet-b"><ol class="steps">${isIOS
-      ? '<li>Abra este endereço no <b>Safari</b>.</li><li>Toque em <b>Compartilhar</b> (o quadrado com a seta).</li><li>Toque em <b>Adicionar à Tela de Início</b>.</li><li>Use sempre pelo ícone do Carimbo.</li>'
-      : '<li>Abra este endereço no <b>Chrome</b> (não dentro do WhatsApp ou do Instagram).</li><li>Toque no menu <b>⋮</b>, no canto de cima.</li><li>Toque em <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b> e depois <b>Instalar</b>).</li><li>Use sempre pelo ícone do Carimbo.</li>'}</ol>
+      ? '<li>Abra este endereço no <b>Safari</b>.</li><li>Toque em <b>Compartilhar</b> (o quadrado com a seta).</li><li>Toque em <b>Adicionar à Tela de Início</b>.</li><li>Use sempre pelo ícone da Carteira Virtual.</li>'
+      : '<li>Abra este endereço no <b>Chrome</b> (não dentro do WhatsApp ou do Instagram).</li><li>Toque no menu <b>⋮</b>, no canto de cima.</li><li>Toque em <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b> e depois <b>Instalar</b>).</li><li>Use sempre pelo ícone da Carteira Virtual.</li>'}</ol>
     <p class="lead">Instalado, o celular protege os documentos e não apaga sozinho.</p></div></div>`;
   dlg.showModal();
 }
@@ -554,8 +554,8 @@ function riskNote(){
   const safeHere = installed() && persisted !== false;
   if (synced || safeHere) return '';
   return `<div class="alert bad risk" role="alert"><strong>Seus documentos ainda podem sumir</strong>
-    Aberto pelo navegador, o celular pode apagar os dados quando falta espaço ou quando o navegador é limpo. ${installed() ? 'Este aparelho não liberou o armazenamento protegido. Salve uma cópia na nuvem.' : '<b>Instale o Carimbo</b>: instalado, o celular guarda os documentos protegidos, só para você, sem conta.'}
-    <div class="row-btns">${installed() ? '' : '<button class="btn sm stamp" data-act="install">Instalar o Carimbo</button>'}<button class="btn sm ghost" data-act="google">${GOOGLE_ICON}Cópia na nuvem</button></div></div>`;
+    Aberto pelo navegador, o celular pode apagar os dados quando falta espaço ou quando o navegador é limpo. ${installed() ? 'Este aparelho não liberou o armazenamento protegido. Salve uma cópia na nuvem.' : '<b>Instale a Carteira Virtual</b>: instalado, o celular guarda os documentos protegidos, só para você, sem conta.'}
+    <div class="row-btns">${installed() ? '' : '<button class="btn sm stamp" data-act="install">Instalar a Carteira Virtual</button>'}<button class="btn sm ghost" data-act="google">${GOOGLE_ICON}Cópia na nuvem</button></div></div>`;
 }
 function renderSyncLine(){
   // topo: a inicial da conta no lugar dos avisos técnicos
@@ -666,7 +666,7 @@ function render(){
     h += `<div class="empty">
       <svg viewBox="0 0 120 120" aria-hidden="true"><g transform="rotate(-12 60 60)" fill="none" stroke="currentColor"><circle cx="60" cy="60" r="44" stroke-width="5"/><circle cx="60" cy="60" r="33" stroke-width="2" stroke-dasharray="5 4"/></g><text x="60" y="66" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="15" font-weight="600" fill="currentColor" transform="rotate(-12 60 60)">VAZIO</text></svg>
       <h3>${trip ? 'Nada nesta viagem ainda' : f === 'personal' ? 'Nada em Meus documentos' : 'Comece pelo passaporte'}</h3>
-      <p>${trip ? 'Adicione o visto, as passagens e as reservas. Na fila da embaixada, tudo estará aqui, mesmo sem sinal.' : 'Toque em Adicionar documento e tire uma foto ou escolha o PDF. O Carimbo descobre o que é e preenche tudo. Fica salvo na sua conta e abre mesmo sem internet.'}</p>
+      <p>${trip ? 'Adicione o visto, as passagens e as reservas. Na fila da embaixada, tudo estará aqui, mesmo sem sinal.' : 'Toque em Adicionar documento e tire uma foto ou escolha o PDF. A Carteira Virtual descobre o que é e preenche tudo. Fica salvo na sua conta e abre mesmo sem internet.'}</p>
       <div class="more-add"><button class="link-plain" data-act="paste">Colar texto de um e-mail</button><button class="link-plain" data-act="kind-blank">Preencher à mão</button></div>
     </div>`;
   }
@@ -703,7 +703,7 @@ const ICON = {
 /* ---------- Formulário de documento ---------- */
 let draftRange = {}, draftFiles = [], draftText = '', draftX = {}, readToken = 0, skipFiles = [], skipExisting = null;
 
-// Adicionar: abre direto a câmera/arquivos. O tipo o Carimbo descobre sozinho.
+// Adicionar: abre direto a câmera/arquivos. O tipo a Carteira Virtual descobre sozinha.
 function addDoc(){ Extract.warm(); $('#addfile').click() }
 
 async function readNewDoc(fileList, existing){
@@ -874,7 +874,7 @@ function openDocForm(doc, pre){
   const type = doc?.type || pre?.type || 'other';
   const d = doc || {
     id: uid(), type, title: pre?.title || '', number: pre?.number || '', x: pre?.x || {},
-    holder: pre?.holder || (['passport', 'id', 'visa'].includes(type) ? store.get('carimbo.holder') : '') || '',
+    holder: pre?.holder || (['passport', 'id', 'visa'].includes(type) ? store.get('carteira.holder') : '') || '',
     expires: pre?.expires || '', notes: pre?.notes || '',
     tripId: filterTrip || (['ticket', 'stay', 'tour', 'insurance', 'visa'].includes(type) ? matchTrip(pre?.dates) : ''),
     pinned: type === 'passport' && !state.docs.some(x => x.pinned && x.type === 'passport'), files: pre?.files || [],
@@ -997,7 +997,7 @@ async function saveDoc(form){
     updatedAt: Date.now(),
   };
   for (const f of d.files) if (f.type === 'application/pdf' && !f.thumb) f.thumb = await Extract.pdfThumb(f.blob).catch(() => null);
-  if (d.holder && (type === 'passport' || type === 'id')) store.set('carimbo.holder', d.holder);
+  if (d.holder && (type === 'passport' || type === 'id')) store.set('carteira.holder', d.holder);
   const trip = !old && !d.tripId ? await autoTrip(d, draftRange) : null;
   if (trip) d.autoTrip = true;
   try { await dbPut('docs', d) } catch (e) { return toast('Não foi possível salvar: espaço cheio no aparelho') }
@@ -1005,7 +1005,7 @@ async function saveDoc(form){
   Sync.changed();
   // o documento salvo nunca fica escondido: troca a pessoa ou a aba se ele não apareceria
   let where = '';
-  if (!vis().includes(d)) { state.person = d.person; store.set('carimbo.person', d.person); where = ` para ${personName(d.person)}` }
+  if (!vis().includes(d)) { state.person = d.person; store.set('carteira.person', d.person); where = ` para ${personName(d.person)}` }
   const t = state.trips.find(x => x.id === state.filter);
   if ((state.filter === 'personal' && d.tripId) || (t && d.tripId !== t.id)) state.filter = 'all';
   $('#form').close(); render(); toast(trip ? `Salvo${where} na viagem ${trip.name}` : old ? 'Documento atualizado' : `Documento salvo${where}`);
@@ -1103,7 +1103,7 @@ function drawViewer(){
 }
 
 /* ---------- Sincronização (tela) ---------- */
-let syncEmail = store.get('carimbo.email') || '', syncMode = 'google', syncSent = false;
+let syncEmail = store.get('carteira.email') || '', syncMode = 'google', syncSent = false;
 function renderSync(msg = ''){
   const box = $('#syncbox'); if (!box) return;
   const st = Sync.state;
@@ -1111,7 +1111,7 @@ function renderSync(msg = ''){
   const note = err ? `<p class="sync-err" role="alert">${esc(err)}</p>` : '';
   if (!st.signedIn && syncMode !== 'email') {
     box.innerHTML = `<h3>Salvar na nuvem</h3>
-      <p>Entre com sua conta Google: seus documentos passam a ficar salvos no Carimbo e voltam em qualquer celular ou computador, mesmo se este aparelho apagar tudo.</p>
+      <p>Entre com sua conta Google: seus documentos passam a ficar salvos na Carteira Virtual e voltam em qualquer celular ou computador, mesmo se este aparelho apagar tudo.</p>
       ${note}
       <div class="row-btns"><button class="btn primary" data-act="google">${GOOGLE_ICON}Entrar com Google</button></div>
       <button class="link-plain" data-act="sync-email" style="margin:8px 0 0">Usar e-mail e senha</button>`;
@@ -1121,7 +1121,7 @@ function renderSync(msg = ''){
     const up = syncMode === 'up' && !st.signedIn;
     box.innerHTML = `<h3>Sincronizar entre aparelhos</h3>
       ${syncSent ? `<p class="sync-ok">Enviei um e-mail de confirmação para ${esc(syncEmail)}. Abra o link do e-mail e depois volte aqui e toque em Entrar.</p>`
-        : `<p>${up ? 'Crie uma conta para ter os mesmos documentos no celular e no computador.' : 'Entre com seu e-mail e senha do Carimbo.'} Os documentos sobem trancados com a sua senha: ninguém mais consegue ler.</p>`}
+        : `<p>${up ? 'Crie uma conta para ter os mesmos documentos no celular e no computador.' : 'Entre com seu e-mail e senha da Carteira Virtual.'} Os documentos sobem trancados com a sua senha: ninguém mais consegue ler.</p>`}
       ${st.signedIn ? `<p>Conectado como <b>${esc(st.email)}</b>. Digite a senha para abrir o cofre.</p>`
         : `<input class="inp" id="syncemail" type="email" autocomplete="email" placeholder="seu@email.com" value="${esc(syncEmail)}">`}
       <input class="inp" id="syncpass" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="${up ? 'Crie uma senha (mínimo 8 caracteres)' : 'Senha'}">
@@ -1161,7 +1161,7 @@ async function syncAction(act, btn){
       if (!/^\S+@\S+\.\S+$/.test(e)) return renderSync('Digite um e-mail válido.');
       if (p.length < 8) return renderSync('A senha precisa ter pelo menos 8 caracteres.');
       if (p2 !== undefined && p !== p2) return renderSync('As duas senhas não são iguais.');
-      syncEmail = e; store.set('carimbo.email', e);
+      syncEmail = e; store.set('carteira.email', e);
       if (st.signedIn) { busy('Abrindo…'); await Sync.unlock(p) }
       else if (act === 'sync-up') {
         busy('Criando…');
@@ -1220,10 +1220,10 @@ const toDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r
 async function exportAll(){
   toast('Preparando backup…');
   const docs = await Promise.all(state.docs.map(async d => ({ ...d, files: await Promise.all((d.files || []).map(async f => ({ name:f.name, type:f.type, data: await toDataURL(f.blob) }))) })));
-  const json = JSON.stringify({ app:'carimbo', version:1, exportedAt:new Date().toISOString(), trips:state.trips, docs });
+  const json = JSON.stringify({ app:'carteira', version:1, exportedAt:new Date().toISOString(), trips:state.trips, docs });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([json], { type:'application/json' }));
-  a.download = `carimbo-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `carteira-backup-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   toast('Backup baixado');
@@ -1232,7 +1232,7 @@ async function exportAll(){
 async function importAll(file){
   try {
     const data = JSON.parse(await file.text());
-    if (data.app !== 'carimbo') throw 0;
+    if (!['carteira', 'carimbo'].includes(data.app)) throw 0;
     for (const t of data.trips || []) await dbPut('trips', t);
     for (const d of data.docs || []) {
       d.files = await Promise.all((d.files || []).map(async f => ({ name:f.name, type:f.type, blob: await (await fetch(f.data)).blob() })));
@@ -1240,7 +1240,7 @@ async function importAll(file){
     }
     await load(); $('#form').close(); Sync.changed();
     toast(`${(data.docs || []).length} documentos restaurados`);
-  } catch { toast('Este arquivo não é um backup do Carimbo') }
+  } catch { toast('Este arquivo não é um backup da Carteira Virtual') }
 }
 
 /* ---------- Eventos ---------- */
@@ -1257,7 +1257,7 @@ async function deleteDoc(id){
   toastT = setTimeout(() => { t.classList.remove('on', 'undo'); lastDeleted = null }, 6000);
 }
 function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.remove('undo'); t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200) }
-function setFilter(id){ state.filter = id; store.set('carimbo.filter', id); render(); window.scrollTo({ top:0 }) }
+function setFilter(id){ state.filter = id; store.set('carteira.filter', id); render(); window.scrollTo({ top:0 }) }
 
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
@@ -1265,12 +1265,12 @@ document.addEventListener('click', async e => {
   if (act === 'check') return; // tratado no change
   switch (act) {
     case 'filter': setFilter(id); break;
-    case 'person': state.person = id; store.set('carimbo.person', id); render(); window.scrollTo({ top: 0 }); break;
+    case 'person': state.person = id; store.set('carteira.person', id); render(); window.scrollTo({ top: 0 }); break;
     case 'new-doc': addDoc(); break;
     case 'paste': {
       const dlg = $('#form');
       dlg.innerHTML = `<form class="sheet" data-form="paste"><div class="sheet-h"><h2>Colar texto de um e-mail</h2><button type="button" class="icon-btn" data-act="close" aria-label="Fechar">${ICON.close}</button></div>
-        <div class="sheet-b"><p class="lead">No e-mail da reserva (Booking, companhia aérea, hotel…), selecione tudo, copie e cole aqui. O Carimbo lê e preenche.</p>
+        <div class="sheet-b"><p class="lead">No e-mail da reserva (Booking, companhia aérea, hotel…), selecione tudo, copie e cole aqui. A Carteira Virtual lê e preenche.</p>
         <textarea class="inp" name="text" rows="10" placeholder="Cole aqui o texto do e-mail" required></textarea></div>
         <div class="sheet-f"><button type="button" class="btn ghost" data-act="close">Cancelar</button><button class="btn primary grow">Ler texto</button></div></form>`;
       dlg.showModal(); break;
@@ -1392,11 +1392,11 @@ function showGate(on){
     const online = navigator.onLine;
     $('#gatebtn').innerHTML = online ? `${GOOGLE_ICON}Entrar com Google` : 'Sem internet';
     $('#gatebtn').disabled = !online;
-    if (!online) $('#gatefine').textContent = 'Conecte-se à internet para entrar. Depois disso, o Carimbo funciona mesmo sem sinal.';
+    if (!online) $('#gatefine').textContent = 'Conecte-se à internet para entrar. Depois disso, a Carteira Virtual funciona mesmo sem sinal.';
   }
 }
 addEventListener('online', () => { if (!$('#gate').hidden) showGate(true) });
-load().then(async () => { await Sync.init(); showGate(!Sync.state.signedIn); if (Sync.state.signedIn) autoTripsForOld().catch(() => {}) }).catch(() => { $('#app').innerHTML = '<div class="empty"><h3>Armazenamento indisponível</h3><p>Abra o Carimbo fora da janela anônima para guardar documentos neste aparelho.</p></div>' });
+load().then(async () => { await Sync.init(); showGate(!Sync.state.signedIn); if (Sync.state.signedIn) autoTripsForOld().catch(() => {}) }).catch(() => { $('#app').innerHTML = '<div class="empty"><h3>Armazenamento indisponível</h3><p>Abra a Carteira Virtual fora da janela anônima para guardar documentos neste aparelho.</p></div>' });
 if (navigator.storage?.persist) navigator.storage.persist().then(v => { persisted = v; render() }).catch(() => {});
 addEventListener('appinstalled', () => navigator.storage?.persist?.().then(v => { persisted = v; render() }));
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {

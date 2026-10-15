@@ -1,4 +1,4 @@
-/* Carimbo: sincronização entre aparelhos.
+/* Carteira Virtual: sincronização entre aparelhos.
    Tudo é criptografado no aparelho (AES-GCM, chave tirada da senha do cofre) antes de subir.
    No Supabase fica só um arquivo ilegível por documento. */
 (() => {
@@ -9,7 +9,7 @@ const KINDS = ['docs', 'trips'];
 
 let sb = null, key = null, user = null, again = false, timer = null;
 const state = { status: 'off', last: null, error: '' };
-const S = () => window.CarimboStore;
+const S = () => window.CarteiraStore;
 const listeners = new Set();
 const emit = () => listeners.forEach(fn => { try { fn(state) } catch {} });
 const set = (k, v) => { state[k] = v; emit() };
@@ -21,7 +21,7 @@ const loadScript = src => new Promise((res, rej) => {
 async function client(){
   if (sb) return sb;
   if (!window.supabase) await loadScript('vendor/supabase.js');
-  sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'carimbo.auth' } });
+  sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'carteira.auth' } });
   return sb;
 }
 const bucket = () => sb.storage.from(BUCKET);
