@@ -237,6 +237,26 @@ textarea.inp{height:auto;min-height:80px;padding:12px 14px;resize:vertical}
 .reading h3{font-size:21px;margin:14px 0 4px}
 .reading p{margin:0;color:var(--ink-2)}
 .reading .fine{font-size:14px;color:var(--ink-3);margin-top:14px}
+.field>span{display:flex;align-items:baseline;gap:8px}
+.pickbtn{margin-left:auto;flex:none;width:30px;height:26px;border:0;border-radius:8px;background:var(--stamp-soft);color:var(--stamp);display:grid;place-items:center;padding:0}
+.pickbtn svg{width:16px;height:16px}
+.field>span{min-height:26px;align-items:center}
+.pick-hint{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:14px;color:var(--ink-2)}
+.pick-hint .pickbtn{margin:0;pointer-events:none}
+.picker{position:absolute;inset:0;z-index:5;background:var(--paper);display:flex;flex-direction:column;padding:14px 16px 0;border-radius:inherit}
+.pk-h{display:flex;align-items:center;gap:10px}
+.pk-h div{flex:1;min-width:0}
+.pk-h small{display:block;color:var(--ink-3);font-weight:600;font-size:13px}
+.pk-h b{display:block;font-size:20px}
+.pk-tip{margin:8px 0 10px;color:var(--ink-2);font-size:15px}
+.pk-sug{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.pk-find{height:42px;margin-bottom:10px}
+.pk-text{flex:1;overflow:auto;padding-bottom:calc(env(safe-area-inset-bottom) + 16px);font-size:15px;line-height:1.5}
+.pk-text .ln{padding:8px 10px;border-radius:10px;cursor:pointer;color:var(--ink);word-break:break-word}
+.pk-text .ln:active{background:var(--sunk)}
+.tok{display:inline;background:var(--stamp-soft);color:var(--ink);border-radius:6px;padding:1px 5px;font-family:var(--mono);font-size:.92em;cursor:pointer;border:0}
+.tok.big{display:inline-flex;align-items:center;height:38px;padding:0 12px;font-size:15px;border-radius:999px}
+form.sheet{position:relative}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
 .fgrid .wide{grid-column:1/-1}
 .fgrid .field{min-width:0}
@@ -759,6 +779,68 @@ function matchTrip(dates){
   return '';
 }
 
+/* ---------- Tocar para preencher: escolher o valor no texto do documento ---------- */
+const pickBtn = (name, kind, label) => draftText.trim() ? `<button type="button" class="pickbtn" data-act="pick" data-f="${name}" data-kind="${kind || ''}" data-l="${esc(label)}" aria-label="Escolher ${esc(label)} no documento">${PICK_ICON}</button>` : '';
+const PICK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v6"/><path d="M14 3v4h4"/><path d="M6 3v18h6"/><path d="M15 14l6 2.5-2.6 1 -1 2.6z"/></svg>';
+// datas, horários, valores e códigos que aparecem no texto
+const TOK = /(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+(?:de\s+)?[A-Za-zç]{3,9}\.?(?:\/[A-Za-z]{3,9})?(?:\s+(?:de\s+)?\d{4})?|\d{1,2}(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(?:\d{4}|\d{2})?|\d{1,2}[:h]\d{2}|(?:R\$|US\$|USD|EUR|€|£)\s?[\d.,]+|(?=[A-Z0-9.\-\/]*\d)[A-Z0-9][A-Z0-9.\-\/]{1,})/gi;
+const tokKind = t => /^\d{1,2}[:h]\d{2}$/i.test(t) ? 'time' : (window.Extract && Extract.findDates(t).length) ? 'date' : /^(R\$|US\$|USD|EUR|€|£)/i.test(t) ? 'money' : 'code';
+const WANTS = { date: ['date'], datetime: ['date', 'time'], time: ['time'] };
+const MONEYF = new Set(['x_value', 'x_total']);
+let pickState = null;
+function openPicker(btn){
+  const form = btn.closest('form'), name = btn.dataset.f, kind = btn.dataset.kind;
+  const want = MONEYF.has(name) ? ['money'] : WANTS[kind] || (kind === 'wide' ? null : ['code']);
+  pickState = { form, name, kind, d: null, t: null };
+  const lines = draftText.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(l => l.length > 1);
+  const seen = new Set(), sug = [];
+  for (const l of lines) for (const m of l.matchAll(TOK)) {
+    const t = m[0].trim(), k = tokKind(t);
+    if (want && want.includes(k) && !seen.has(t.toLowerCase()) && t.length > 1) { seen.add(t.toLowerCase()); sug.push(t) }
+  }
+  // destaca no texto original e só depois escapa cada pedaço
+  const mark = l => { let out = '', last = 0; for (const m of l.matchAll(new RegExp(TOK.source, 'gi'))) { out += esc(l.slice(last, m.index)) + `<span class="tok" data-v="${esc(m[0])}">${esc(m[0])}</span>`; last = m.index + m[0].length } return out + esc(l.slice(last)) };
+  const p = document.createElement('div');
+  p.className = 'picker'; p.id = 'picker';
+  p.innerHTML = `<div class="pk-h"><div><small>Escolher no documento</small><b>${esc(btn.dataset.l)}</b></div><button type="button" class="icon-btn" data-act="pick-close" aria-label="Fechar">${ICON.close}</button></div>
+    <p class="pk-tip" id="pktip">${kind === 'datetime' ? 'Toque na data e depois no horário.' : want ? 'Toque no valor certo.' : 'Toque na linha certa, ou só em uma parte destacada.'}</p>
+    ${sug.length ? `<div class="pk-sug">${sug.slice(0, 14).map(t => `<button type="button" class="tok big" data-v="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}
+    <input class="inp pk-find" id="pkfind" placeholder="Procurar no documento" autocomplete="off">
+    <div class="pk-text" id="pktext">${lines.map(l => `<div class="ln" data-v="${esc(l)}">${mark(l)}</div>`).join('')}</div>`;
+  form.appendChild(p);
+}
+function pickValue(raw){
+  const st = pickState; if (!st) return;
+  const inp = st.form.elements[st.name]; if (!inp) return;
+  const time = (raw.match(/(\d{1,2})[:h](\d{2})/) || []).slice(1);
+  const date = window.Extract ? Extract.findDates(raw)[0]?.date : null;
+  let v = null;
+  if (st.kind === 'date') v = date;
+  else if (st.kind === 'time') v = time.length ? time[0].padStart(2, '0') + ':' + time[1] : null;
+  else if (st.kind === 'datetime') {
+    if (date) st.d = date; if (time.length) st.t = time[0].padStart(2, '0') + ':' + time[1];
+    const cur = inp.value || '';
+    const d = st.d || cur.slice(0, 10), t = st.t || cur.slice(11, 16);
+    if (d && t) v = `${d}T${t}`;
+    else { $('#pktip').textContent = d ? `Data: ${fmt(d)}. Agora toque no horário.` : `Horário: ${t}. Agora toque na data.`; return }
+  } else v = st.kind === 'big' ? raw.toUpperCase() : raw;
+  if (!v) { $('#pktip').textContent = st.kind === 'date' ? 'Isso não é uma data. Toque numa data.' : 'Isso não é um horário. Toque num horário.'; return }
+  inp.value = v; inp.classList.add('auto');
+  if (st.name.startsWith('x_')) draftX[st.name.slice(2)] = v;
+  closePicker(); toast('Preenchido');
+}
+function closePicker(){ $('#picker')?.remove(); pickState = null }
+document.addEventListener('click', e => {
+  if (!pickState) return;
+  const tok = e.target.closest('#picker .tok'), ln = e.target.closest('#picker .ln');
+  if (tok) { e.preventDefault(); pickValue(tok.dataset.v) }
+  else if (ln) { e.preventDefault(); pickValue(ln.dataset.v) }
+});
+document.addEventListener('input', e => {
+  if (e.target.id !== 'pkfind') return;
+  const q = plainName(e.target.value);
+  document.querySelectorAll('#pktext .ln').forEach(l => l.hidden = q && !plainName(l.dataset.v).includes(q));
+});
 function fieldsHTML(type, d, auto = new Set()){
   return `<div class="fgrid">${fieldsOf(type).map(([k, l, kind]) => {
     const v = fval(d, k), name = CORE.has(k) ? k : 'x_' + k;
@@ -769,7 +851,7 @@ function fieldsHTML(type, d, auto = new Set()){
       : kind === 'tel' ? `<input class="inp${a}" type="tel" name="${name}" value="${esc(v)}">`
       : k === 'address' ? `<textarea class="inp${a}" name="${name}" rows="2">${esc(v)}</textarea>`
       : `<input class="inp${kind === 'big' ? ' mono' : ''}${a}" name="${name}" value="${esc(v)}" autocomplete="off"${kind === 'big' ? ' autocapitalize="characters" spellcheck="false"' : ''}>`;
-    return `<label class="field${kind === 'big' || kind === 'wide' || kind === 'tel' ? ' wide' : ''}"><span>${l}</span>${input}</label>`;
+    return `<label class="field${kind === 'big' || kind === 'wide' || kind === 'tel' ? ' wide' : ''}"><span>${l}${pickBtn(name, kind, l)}</span>${input}</label>`;
   }).join('')}</div>`;
 }
 function collect(form){
@@ -783,6 +865,7 @@ function collect(form){
 }
 
 function openDocForm(doc, pre){
+  pickState = null;
   const filterTrip = state.trips.some(t => t.id === state.filter) ? state.filter : '';
   const type = doc?.type || pre?.type || 'other';
   const d = doc || {
@@ -812,11 +895,12 @@ function openDocForm(doc, pre){
       <fieldset class="field" style="border:0;padding:0;margin-inline:0"><legend style="font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px">Tipo</legend>
         <div class="types">${ORDER.map(k => `<label style="--tc:${TYPES[k].col}"><input type="radio" name="type" value="${k}" ${d.type === k ? 'checked' : ''}><span>${typeIcon(k)}${TYPES[k].l}</span></label>`).join('')}</div>
       </fieldset>
-      <label class="field"><span>Nome</span><input class="inp${auto.has('title') ? ' auto' : ''}" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
+      <label class="field"><span>Nome${pickBtn('title', 'wide', 'Nome')}</span><input class="inp${auto.has('title') ? ' auto' : ''}" name="title" value="${esc(d.title)}" placeholder="${esc(TYPES[d.type].l)}" autocomplete="off"></label>
+      ${draftText.trim() ? `<p class="pick-hint"><span class="pickbtn" aria-hidden="true">${PICK_ICON}</span>Algum campo errado? Toque no ícone ao lado dele e escolha o valor no documento.</p>` : ''}
       <div id="fieldbox">${fieldsHTML(d.type, d, auto)}</div>
       ${pre?.mrz && pre.numberOk === false ? '<small class="hint">Confira o número: a foto pode ter atrapalhado a leitura.</small>' : ''}
       <label class="field"><span>De quem é</span><select class="inp" name="person">${OWNERS.map(p => `<option value="${p.id}" ${(d.person || personOf(d.holder) || (['stay', 'tour'].includes(d.type) ? 'both' : state.person !== 'all' ? state.person : 'mari')) === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>
-      <label class="field"><span>Titular</span><input class="inp${auto.has('holder') ? ' auto' : ''}" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
+      <label class="field"><span>Titular${pickBtn('holder', 'wide', 'Titular')}</span><input class="inp${auto.has('holder') ? ' auto' : ''}" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
       <label class="field"><span>Viagem</span><select class="inp${matched ? ' auto' : ''}" name="tripId"><option value="">Pessoal (todas as viagens)</option>${tripsSorted().map(t => `<option value="${t.id}" ${d.tripId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
       <label class="field"><span>Observações</span><textarea class="inp${auto.has('notes') ? ' auto' : ''}" name="notes" placeholder="Ex.: original fica na pasta azul">${esc(d.notes)}</textarea></label>
       <div class="field"><span>Arquivos</span>
@@ -1182,6 +1266,8 @@ document.addEventListener('click', async e => {
     case 'export': exportAll(); break;
     case 'google': Sync.google().catch(e => toast(e.message)); break;
     case 'install': installApp(); break;
+    case 'pick': openPicker(b); break;
+    case 'pick-close': closePicker(); break;
     case 'logout': $('#form').close(); logout(); break;
     case 'restore-cloud': b.disabled = true; b.textContent = 'Baixando…'; Sync.restoreAll().then(n => { toast(`${n} documentos baixados da nuvem`); renderSync() }).catch(e => { toast(e.message); renderSync() }); break;
     case 'restore-trash': restoreTrash(); break;
