@@ -474,7 +474,7 @@ window.CarimboStore = {
   getFlag: () => store.get('carimbo.sync') === '1', setFlag: on => store.set('carimbo.sync', on ? '1' : ''),
 };
 
-const state = { docs:[], trips:[], filter: store.get('carimbo.filter') || 'all', person: store.get('carimbo.person') || 'all' };
+const state = { docs:[], trips:[], filter: store.get('carimbo.filter') || 'all', person: ['mari', 'nati'].includes(store.get('carimbo.person')) ? store.get('carimbo.person') : 'mari' };
 // Pessoas que usam este Carimbo. 'match' = nomes que aparecem nos documentos dela.
 const PEOPLE = [
   { id: 'mari', name: 'Mari', match: ['mariana', 'mari'] },
@@ -483,10 +483,10 @@ const PEOPLE = [
 const plainName = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const personOf = holder => { const w = plainName(holder).split(/[^a-z]+/); return PEOPLE.find(p => p.match.some(m => w.includes(m)))?.id || '' };
 // 'both' = documento das duas (reserva de hotel, tour...)
-const OWNERS = [...PEOPLE, { id: 'both', name: 'As duas' }];
+const OWNERS = [...PEOPLE, { id: 'both', name: 'Todas' }];
 const personName = id => OWNERS.find(p => p.id === id)?.name || '';
 // documentos da pessoa escolhida no topo
-const vis = () => state.person === 'all' ? state.docs : state.docs.filter(d => (d.person || 'mari') === state.person || d.person === 'both');
+const vis = () => state.docs.filter(d => (d.person || 'mari') === state.person || d.person === 'both');
 
 /* ---------- Utilidades de data ---------- */
 const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d };
@@ -565,7 +565,7 @@ function renderSyncLine(){
   a.classList.toggle('warn', st.status === 'error');
 }function renderWho(){
   const el = $('#who'); if (!el) return;
-  el.innerHTML = [...PEOPLE, { id: 'all', name: 'Todas' }].map(p => `<button class="who-b" aria-pressed="${state.person === p.id}" data-act="person" data-id="${p.id}">${p.name}</button>`).join('');
+  el.innerHTML = PEOPLE.map(p => `<button class="who-b" aria-pressed="${state.person === p.id}" data-act="person" data-id="${p.id}">${p.name}</button>`).join('');
 }
 function renderNext(){
   renderWho();
@@ -608,7 +608,7 @@ function boxes(d){
 function docCard(d){
   const t = TYPES[d.type] || TYPES.other, st = status(d), bf = bigField(d), bv = bf && fval(d, bf[0]);
   const trip = d.tripId && state.trips.find(x => x.id === d.tripId);
-  const tags = [state.person === 'all' && personName(d.person || 'mari') && `<span class="tag who-t">${personName(d.person || 'mari')}</span>`, st && st.k !== 'ok' && `<span class="tag ${st.k}">${st.t}</span>`, state.filter === 'all' && trip && `<span class="tag">${esc(trip.name)}</span>`, (d.files || []).length > 1 && `<span class="tag">${d.files.length} arquivos</span>`].filter(Boolean).join('');
+  const tags = [d.person === 'both' && `<span class="tag who-t">Todas</span>`, st && st.k !== 'ok' && `<span class="tag ${st.k}">${st.t}</span>`, state.filter === 'all' && trip && `<span class="tag">${esc(trip.name)}</span>`, (d.files || []).length > 1 && `<span class="tag">${d.files.length} arquivos</span>`].filter(Boolean).join('');
   return `<div class="doc-wrap"><button class="doc" style="--tc:${t.col}" data-act="open" data-id="${d.id}">
     <span class="doc-head">
       <span class="doc-title">${esc(d.title)}</span>
@@ -903,7 +903,7 @@ function openDocForm(doc, pre){
       ${draftText.trim() ? `<p class="pick-hint"><span class="pickbtn" aria-hidden="true">${PICK_ICON}</span>Algum campo errado? Toque no ícone ao lado dele e escolha o valor no documento.</p>` : ''}
       <div id="fieldbox">${fieldsHTML(d.type, d, auto)}</div>
       ${pre?.mrz && pre.numberOk === false ? '<small class="hint">Confira o número: a foto pode ter atrapalhado a leitura.</small>' : ''}
-      <label class="field"><span>De quem é</span><select class="inp" name="person">${OWNERS.map(p => `<option value="${p.id}" ${(d.person || personOf(d.holder) || (['stay', 'tour'].includes(d.type) ? 'both' : state.person !== 'all' ? state.person : 'mari')) === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>
+      <label class="field"><span>De quem é</span><select class="inp" name="person">${OWNERS.map(p => `<option value="${p.id}" ${(d.person || personOf(d.holder) || (['stay', 'tour'].includes(d.type) ? 'both' : state.person)) === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>
       <label class="field"><span>Titular${pickBtn('holder', 'wide', 'Titular')}</span><input class="inp${auto.has('holder') ? ' auto' : ''}" name="holder" value="${esc(d.holder)}" autocomplete="name"></label>
       <label class="field"><span>Viagem</span><select class="inp${matched ? ' auto' : ''}" name="tripId"><option value="">Pessoal (todas as viagens)</option>${tripsSorted().map(t => `<option value="${t.id}" ${d.tripId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
       <label class="field"><span>Observações</span><textarea class="inp${auto.has('notes') ? ' auto' : ''}" name="notes" placeholder="Ex.: original fica na pasta azul">${esc(d.notes)}</textarea></label>
@@ -1005,7 +1005,7 @@ async function saveDoc(form){
   Sync.changed();
   // o documento salvo nunca fica escondido: troca a pessoa ou a aba se ele não apareceria
   let where = '';
-  if (!vis().includes(d)) { state.person = 'all'; store.set('carimbo.person', 'all'); where = ` para ${personName(d.person)}` }
+  if (!vis().includes(d)) { state.person = d.person; store.set('carimbo.person', d.person); where = ` para ${personName(d.person)}` }
   const t = state.trips.find(x => x.id === state.filter);
   if ((state.filter === 'personal' && d.tripId) || (t && d.tripId !== t.id)) state.filter = 'all';
   $('#form').close(); render(); toast(trip ? `Salvo${where} na viagem ${trip.name}` : old ? 'Documento atualizado' : `Documento salvo${where}`);
