@@ -1003,7 +1003,13 @@ async function saveDoc(form){
   try { await dbPut('docs', d) } catch (e) { return toast('Não foi possível salvar: espaço cheio no aparelho') }
   state.docs = state.docs.filter(x => x.id !== id).concat(d);
   Sync.changed();
-  $('#form').close(); render(); toast(trip ? `Salvo na viagem ${trip.name}` : old ? 'Documento atualizado' : 'Documento salvo');
+  // o documento salvo nunca fica escondido: troca a pessoa ou a aba se ele não apareceria
+  let where = '';
+  if (!vis().includes(d)) { state.person = 'all'; store.set('carimbo.person', 'all'); where = ` para ${personName(d.person)}` }
+  const t = state.trips.find(x => x.id === state.filter);
+  if ((state.filter === 'personal' && d.tripId) || (t && d.tripId !== t.id)) state.filter = 'all';
+  $('#form').close(); render(); toast(trip ? `Salvo${where} na viagem ${trip.name}` : old ? 'Documento atualizado' : `Documento salvo${where}`);
+  requestAnimationFrame(() => document.querySelector(`.doc[data-id="${d.id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
 }
 
 /* ---------- Viagens ---------- */
